@@ -3,7 +3,7 @@
 このファイルは AI コーディングエージェント (Claude / Codex / Cursor 等) 向けの実装規約集。
 **実装前に必ず参照し、これに反する書き方をしない。**
 
-関連: [docs/PRD.md](./docs/PRD.md) / [docs/TECH_STACK.md](./docs/TECH_STACK.md)
+関連: [docs/PRD.md](./docs/PRD.md) / [docs/TECH_STACK.md](./docs/TECH_STACK.md) / [docs/DATA_MODEL.md](./docs/DATA_MODEL.md)
 
 ---
 
@@ -54,16 +54,32 @@ test/
 
 ## 4. データモデル規約
 
-すべての永続化エンティティ (Spot / List / Tag / Visit) は以下のフィールドを必ず持つ:
+詳細は [docs/DATA_MODEL.md](./docs/DATA_MODEL.md)。Phase 1 の永続化エンティティは:
+
+- `folders` — 最上位の整理単位
+- `lists` — フォルダ配下のリスト
+- `spots` — 保存スポット (Places API スナップショット + ユーザー固有データ)
+- `spot_lists` — Spot ↔ List の多対多
+- `visits` — スポットへの訪問履歴 (1 スポットに複数件)
+- `visit_photos` — 訪問の写真 (端末ローカル)
+
+### 4.1 共通カラム
+すべてのエンティティに以下のフィールドを必ず持つ:
 
 | カラム | 型 | 用途 |
 |---|---|---|
 | `id` | TEXT (UUIDv7) | 主キー、端末発番 |
-| `createdAt` | INTEGER (UTC ms) | 作成時刻 |
-| `updatedAt` | INTEGER (UTC ms) | 更新時刻、Phase 2 で同期マージに使う |
-| `deletedAt` | INTEGER? (UTC ms) | ソフトデリート。NULL なら有効 |
+| `created_at` | INTEGER (UTC ms) | 作成時刻 |
+| `updated_at` | INTEGER (UTC ms) | 更新時刻、Phase 2 で同期マージに使う |
+| `deleted_at` | INTEGER? (UTC ms) | ソフトデリート。NULL なら有効 |
 
-クエリは原則 `WHERE deletedAt IS NULL` を付ける。物理削除は使わない。
+クエリは原則 `WHERE deleted_at IS NULL` を付ける。物理削除は使わない。
+
+### 4.2 重要な禁則事項
+- **ユーザー管理のタグ (`tags` テーブル等) を追加しない**。整理はフォルダ/リストで完結する仕様。
+- **訪問状態のカラムを `spots` に持たない**。`visits` テーブルからクエリで派生させる。
+- **`primary_category` を直接編集する UI を作らない**。Places types からの自動マッピング結果。
+- Phase 2 用の列 (`soft_attributes_json`, `owner_user_id` 等) は **絶対に追加しない**。
 
 ---
 
@@ -96,7 +112,7 @@ class SpotsNotifier extends _$SpotsNotifier {
 ## 6. Drift パターン
 
 ```dart
-@DriftDatabase(tables: [Spots, Lists, Tags, Visits, SpotTags, SpotLists])
+@DriftDatabase(tables: [Folders, Lists, Spots, SpotLists, Visits, VisitPhotos])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
@@ -113,8 +129,9 @@ class AppDatabase extends _$AppDatabase {
 }
 ```
 
-- 多対多 (Spot↔Tag, Spot↔List) は中間テーブルで表現。
+- 多対多 (Spot↔List) は中間テーブル `spot_lists` で表現。
 - 複雑なクエリは Drift DSL で書きにくいなら `customSelect` で生 SQL を使う。
+- 訪問状態 (未訪問/訪問済み/訪問回数) は `visits` テーブルからの派生クエリで導出する。
 
 ---
 
