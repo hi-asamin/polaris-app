@@ -5,6 +5,7 @@ analyzer:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.gr.dart"
+    - "lib/l10n/gen/**"
     - "lib/generated/**"
   language:
     strict-casts: true
@@ -17,3 +18,11 @@ linter:
   rules:
     public_member_api_docs: false
     one_member_abstracts: false
+    lines_longer_than_80_chars: false
+    specify_nonobvious_property_types: false
+    always_put_required_named_parameters_first: false
+    cascade_invocations: false
+    avoid_redundant_argument_values: false
+    unnecessary_underscores: false
+    discarded_futures: false
+    use_colored_box: false

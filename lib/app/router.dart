@@ -1,30 +1,105 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/features/folders/presentation/folder_detail_screen.dart';
+import 'package:polaris/features/folders/presentation/folders_screen.dart';
+import 'package:polaris/features/home/presentation/home_shell.dart';
+import 'package:polaris/features/lists/presentation/list_detail_screen.dart';
+import 'package:polaris/features/map/presentation/map_screen.dart';
+import 'package:polaris/features/settings/presentation/settings_screen.dart';
+import 'package:polaris/features/spots/presentation/search_screen.dart';
+import 'package:polaris/features/spots/presentation/spot_detail_screen.dart';
+import 'package:polaris/features/visits/presentation/visits_screen.dart';
+
+final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
+final _listsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'lists');
+final _visitsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'visits');
+final _settingsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'settings');
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/',
+    navigatorKey: _rootNavigatorKey,
+    initialLocation: '/map',
     routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            HomeShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            navigatorKey: _mapNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/map',
+                name: 'map',
+                builder: (context, state) => const MapScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _listsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/folders',
+                name: 'folders',
+                builder: (context, state) => const FoldersScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':folderId',
+                    name: 'folderDetail',
+                    builder: (context, state) => FolderDetailScreen(
+                      folderId: state.pathParameters['folderId']!,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _visitsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/visits',
+                name: 'visits',
+                builder: (context, state) => const VisitsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _settingsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/settings',
+                name: 'settings',
+                builder: (context, state) => const SettingsScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
+      // Root-level routes (push above the shell)
       GoRoute(
-        path: '/',
-        name: 'home',
-        builder: (context, state) => const _PlaceholderHome(),
+        path: '/lists/:listId',
+        name: 'listDetail',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ListDetailScreen(
+          listId: state.pathParameters['listId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/spots/:spotId',
+        name: 'spotDetail',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => SpotDetailScreen(
+          spotId: state.pathParameters['spotId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/search',
+        name: 'search',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SearchScreen(),
       ),
     ],
   );
 });
-
-class _PlaceholderHome extends StatelessWidget {
-  const _PlaceholderHome();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('polaris')),
-      body: const Center(
-        child: Text('polaris-app skeleton ready'),
-      ),
-    );
-  }
-}

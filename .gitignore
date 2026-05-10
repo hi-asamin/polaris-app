@@ -64,3 +64,11 @@ lib/generated_plugin_registrant.dart
 *.jks
 google-services.json
 GoogleService-Info.plist
+
+# Generated code (regenerated via `dart run build_runner build`)
+**/*.freezed.dart
+**/*.g.dart
+**/*.gr.dart
+
+# Generated localizations (regenerated via `flutter pub get`)
+lib/l10n/gen/

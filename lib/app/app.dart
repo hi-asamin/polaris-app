@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:polaris/app/router.dart';
+import 'package:polaris/app/theme.dart';
+import 'package:polaris/l10n/gen/app_localizations.dart';
 
 class PolarisApp extends ConsumerWidget {
   const PolarisApp({super.key});
@@ -11,12 +12,11 @@ class PolarisApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'polaris',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A73E8)),
-      ),
+      theme: PolarisTheme.light(),
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
     );
   }
 }
