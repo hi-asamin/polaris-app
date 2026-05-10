@@ -1,14 +1,14 @@
 # polaris-app 技術選定
 
-> ステータス: Draft v0.1 / 最終更新: 2026-05-10
-> 関連: [PRD.md](./PRD.md)
+> ステータス: **Decided v1.0** / 最終更新: 2026-05-10
+> 関連: [PRD.md](./PRD.md) / [CLAUDE.md](../CLAUDE.md)
 
 ## 0. 設計方針
 
 1. **早く動かす > 完璧な抽象化**: Phase 1 は単独ユーザー向け。共有が来る Phase 2 までは無理に汎化しない。
-2. **境界だけは先に切る**: ただし「マップ SDK」「リモート同期」など将来差し替え得るものは、薄いインターフェースで分離しておく。
-3. **コード生成は積極利用**: Riverpod / Drift / Freezed の codegen で型安全とボイラープレート削減を両立。
-4. **Phase 1 はオフライン完結**: ネットワークは Places 検索と地図タイルのみ。データはローカル DB に閉じる。
+2. **AI が実装しやすいことを最優先**: 実装は AI が進めるため、層は最小、規約は明文化、codegen を厚くする。
+3. **境界だけは先に切る**: マップ SDK は薄ラッパで分離。BaaS は Phase 1 では一切入れず、データモデル汚染を防ぐ。
+4. **Phase 1 はオフライン完結**: ネットワークは Places 検索と地図タイルのみ。認証・クラウド同期なし。
 
 ---
 
@@ -153,9 +153,20 @@
 
 ---
 
-## 3. アーキテクチャ
+## 3. アーキテクチャ (AI 実装最適化)
 
-### 3.1 フォルダ構成 (Feature-first + 軽い層分け)
+### 3.1 設計方針
+
+**Feature-first + 最小 2 層**で構成する。`domain/` 層は **作らない**。
+
+理由:
+- AI は層を増やしすぎる/層を飛ばすのどちらかをやりがち。層が少ないほど一貫性が保ちやすい。
+- ユースケース的なロジックは Riverpod の `Notifier` に集約 → 「ロジックの置き場所」が一意に決まる。
+- インタフェースの過剰抽象化を避ける (Repository も具象クラス。差し替え必要が出てから抽出)。
+- 厚い codegen (Riverpod / Drift / Freezed) で書く量を減らし、AI のミス余地を消す。
+- 規約は `CLAUDE.md` に明文化し、AI に「最頻パターンへの逃げ」をさせない。
+
+### 3.2 フォルダ構成
 
 ```
 lib/
@@ -170,8 +181,8 @@ lib/
     utils/
   features/
     spots/                # スポット (検索・追加・詳細)
-      data/               # Repository, Drift DAO, Places client
-      domain/             # エンティティ, ユースケース
+      data/               # Repository + Drift DAO + Places client
+      models/             # Freezed モデル
       presentation/       # Riverpod providers, screens, widgets
     lists/                # リスト管理
     tags/                 # タグ管理
@@ -182,16 +193,19 @@ lib/
   main.dart
 ```
 
-**強い Clean Architecture はやらない。** `data/domain/presentation` は責務の目印程度。インタフェースだけのために層を増やさない。
+ルール:
+- 1 ファイル 1 概念。300 行を超えたら分割。
+- ファイル名 `snake_case.dart`、テスト同名 `_test.dart`。
+- features 間の直接 import 禁止 (依存は core / shared 経由のみ)。
 
-### 3.2 命名
+### 3.3 命名
 
 - ファイル: `snake_case.dart`
 - クラス: `UpperCamelCase`
 - Riverpod プロバイダ: `xxxProvider` (生成名)
 - Drift テーブル: `Spots`, `Lists`, `Tags`, `Visits` (複数形)
 
-### 3.3 ID 戦略 (同期準備)
+### 3.4 ID 戦略 (同期準備)
 
 - 全エンティティに **UUIDv7** + `updatedAt` (UTC, ms) を保持
 - 端末ローカル発番なので Phase 2 でサーバ導入時もマージ可能
@@ -216,16 +230,23 @@ GitHub Actions で PR トリガに以下を並列実行:
 
 ---
 
-## 5. Phase 2 想定 (今は決め打ちしない)
+## 5. Phase 2 想定 (Phase 2 入りで選定、Phase 1 では一切依存しない)
 
-| 項目 | 本命 | 対抗 | 備考 |
+Phase 1 は **完全ローカル**。BaaS / 認証 / クラウドストレージは Phase 2 計画時に改めて選定する。
+
+選定候補 (確定ではない):
+
+| 項目 | 候補 A | 候補 B | 備考 |
 |---|---|---|---|
-| BaaS / バックエンド | **Supabase** | Firebase | Postgres ベースで Drift スキーマと親和。コスト面でも有利 |
-| 認証 | Apple / Google サインイン | メール認証 | Phase 2 入り口で決定 |
-| 写真クラウド保存 | Supabase Storage | Cloudflare R2 | Supabase 採用なら同じプロバイダで完結 |
-| Push 通知 | OneSignal | Firebase Messaging | 共有リストへの追加通知用 (Phase 2 後半) |
+| BaaS / バックエンド | Supabase (Postgres) | Firebase (Firestore) | Drift スキーマ親和性なら A、ワンストップ性なら B |
+| 認証 | Apple / Google サインイン | メール認証 | 機種変・共有のため必要 |
+| 写真クラウド保存 | Supabase Storage | Cloud Storage / R2 | BaaS 選定に追従 |
+| Push 通知 | OneSignal | FCM | 共有リストへの追加通知用 |
 
-**Phase 1 では Supabase / Firebase の SDK は入れない。** 入れた瞬間にデータモデルが引きずられるため、純粋にローカルで作り切る。
+**Phase 1 不変ルール**
+- BaaS の SDK は **`pubspec.yaml` に追加しない**
+- データモデルが BaaS に引きずられるのを防ぐため、Phase 1 は純粋なローカルアプリとして完成させる
+- 同期に備えた最小準備のみ実施 (UUIDv7 + `updatedAt` + `deletedAt` を全エンティティに保持。3.4 参照)
 
 ---
 
@@ -293,10 +314,14 @@ dev_dependencies:
 
 ---
 
-## 8. ユーザに確認したい論点
+## 8. 決定事項ログ (2026-05-10)
 
-1. **ローカル DB**: Drift (SQL ベース) で進める想定だが、もし「速度最優先で Isar」希望なら再検討。
-2. **Phase 2 BaaS の方向性**: 本命を Supabase と置いている。Firebase 一択にしたい (Apple サインイン即時, 既存知見) なら Phase 1 のキャッシュ層設計を変えたい。
-3. **国際化**: Phase 1 は日本語のみで OK か。最初から英語も用意するなら工数が増える。
-4. **アーキテクチャの厳密度**: 上記は軽量レイヤリング。「Clean Architecture をきちんと敷きたい」なら別案を出す。
-5. **マップ SDK の抽象化**: 薄ラッパ案で良いか、それとも完全独立 (`MapAdapter` インタフェース化) まで踏み込むか。
+| # | 論点 | 決定 |
+|---|---|---|
+| 1 | ローカル DB | **Drift** (多軸 AND/OR 絞り込みが SQL で素直、Phase 2 同期親和) |
+| 2 | Phase 1 認証 | **なし**。完全ローカルで完結 |
+| 3 | Phase 2 BaaS | **未決**。Phase 2 計画時に Supabase / Firebase を改めて比較 |
+| 4 | 国際化 | **日本語のみ**で Phase 1 リリース。文字列管理だけは `AppLocalizations` 化 |
+| 5 | アーキテクチャ | **Feature-first + 最小 2 層** (`data/` と `presentation/`)。`domain/` は作らない |
+| 6 | マップ SDK 抽象化 | **L1 (薄ラッパ)**。`PolarisMapView` で `google_maps_flutter` を包む |
+| 7 | AI 実装規約 | プロジェクトルートに **`CLAUDE.md`** を置き、規約を明文化 |
