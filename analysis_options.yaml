@@ -1,10 +1,13 @@
+# Lint base: very_good_analysis (CLAUDE.md §1 / TECH_STACK §2.10)
 include: package:very_good_analysis/analysis_options.yaml
 
 analyzer:
   exclude:
+    # build_runner / freezed / json_serializable で生成されるコード
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "**/*.gr.dart"
+    # flutter gen-l10n の生成物
     - "lib/l10n/gen/**"
     - "lib/generated/**"
   language:
@@ -12,17 +15,38 @@ analyzer:
     strict-inference: true
     strict-raw-types: true
   errors:
+    # @freezed の `@JsonKey` などで頻発する誤検出を抑制
     invalid_annotation_target: ignore
 
 linter:
   rules:
+    # ライブラリではなくアプリなので、内部 API のドキュメント強制は過剰
     public_member_api_docs: false
+
+    # 単一メソッドの抽象は Riverpod Notifier のパターンで頻出
     one_member_abstracts: false
+
+    # 80 桁制限は現代のディスプレイ前提では厳しすぎる。dart format の整形を信頼する
     lines_longer_than_80_chars: false
+
+    # Riverpod の plain provider 定義は型推論で十分。冗長な型注釈を避ける
     specify_nonobvious_property_types: false
+
+    # required 引数の位置順序は呼び出し側の可読性に依存する。プロジェクトで強制しない
     always_put_required_named_parameters_first: false
+
+    # 短いメソッドチェーンに cascade 強制は読みづらくなる場面がある
     cascade_invocations: false
+
+    # @Default 値や明示的 false の指定はコード意図として残す価値がある
     avoid_redundant_argument_values: false
+
+    # `(_, __)` 形式を許容 (Dart 3.5 以降の `_` ワイルドカードに合わせる過渡期対応)
     unnecessary_underscores: false
+
+    # GestureDetector.onTap などで Future を黙って投げる場面が多く実害が薄い
+    # 厳密に追いたい場合は個別 `unawaited(...)` で対応
     discarded_futures: false
+
+    # ColoredBox 推奨は微細な最適化。可読性のため Container を残すケースを許容
     use_colored_box: false

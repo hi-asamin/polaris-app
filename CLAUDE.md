@@ -3,22 +3,29 @@
 このファイルは AI コーディングエージェント (Claude / Codex / Cursor 等) 向けの実装規約集。
 **実装前に必ず参照し、これに反する書き方をしない。**
 
-関連: [docs/PRD.md](./docs/PRD.md) / [docs/TECH_STACK.md](./docs/TECH_STACK.md) / [docs/DATA_MODEL.md](./docs/DATA_MODEL.md)
+最終更新: 2026-05-16 / 関連: [docs/PRD.md](./docs/PRD.md) / [docs/TECH_STACK.md](./docs/TECH_STACK.md) / [docs/DATA_MODEL.md](./docs/DATA_MODEL.md)
+
+## 現在の前提
+- Flutter **3.41.9** / Dart **3.11.5**
+- Riverpod **3.x** (`flutter_riverpod ^3.3.1` + `riverpod_annotation ^4.0.2`)
+- iOS 16+ / Android API 29+
+- Phase 1 = 完全ローカル (BaaS / 認証 / クラウド同期はなし)
 
 ---
 
 ## 1. 守るべきルール (Hard Rules)
 
 1. **状態管理は Riverpod のみ。** `setState` は描画専用 Stateful (アニメーション・フォーカス制御など) でのみ可。ビジネス状態は必ず `Notifier` / `AsyncNotifier` に置く。
-2. **モデルは必ず Freezed。** 素の `class` でデータモデルを書かない。
-3. **文字列リテラルの直書き禁止。** ユーザに見える文字列は必ず `AppLocalizations` 経由。
+2. **モデルは必ず Freezed。** 素の `class` でデータモデルを書かない (現在のバージョンは `abstract class X with _$X` の Freezed 3 構文)。
+3. **文字列リテラルの直書き禁止。** ユーザに見える UI 文字列は必ず `AppLocalizations` 経由 (`l10n/app_ja.arb` に追加)。モックの **データ値** (スポット名・住所・メモなど DB 由来の値) は直書き可。
 4. **features 間の直接 import 禁止。** `features/spots/` から `features/lists/` を直接参照しない。共有が必要なら `core/` か `shared/` に上げる。
 5. **`domain/` 層は作らない。** ロジックは Repository (`data/`) か Notifier (`presentation/`) に置く。
 6. **Drift スキーマ変更時は `migrations/` に upgrade を必ず書く。** 既存データを壊さない。
 7. **BaaS (Firebase / Supabase) の SDK は追加しない。** Phase 1 は完全ローカル。
 8. **API キーや秘密情報をコミットしない。** `.env` または `--dart-define` で注入。
-9. **生成コード (`*.g.dart`, `*.freezed.dart`) は手で編集しない。** `dart run build_runner build --delete-conflicting-outputs` を使う。
+9. **生成コード (`*.g.dart`, `*.freezed.dart`, `lib/l10n/gen/`) は手で編集しない & コミットしない。** `flutter pub get` と `dart run build_runner build --delete-conflicting-outputs` で再生成する。
 10. **`print` 禁止。** ロギングは `logger` パッケージ or `debugPrint` のみ。
+11. **旧 Riverpod API (`StateProvider`/`StateNotifierProvider`/`ChangeNotifierProvider`) は禁止。** plain `Provider`/`NotifierProvider` または `@riverpod` codegen のいずれかを使う (§5 参照)。
 
 ---
 
@@ -36,19 +43,32 @@
 
 ```
 lib/
-  app/                  # 起動・ルータ・テーマ
-  core/                 # 横断的な基盤 (DB, network, location, theme, utils)
+  app/                  # 起動・ルータ・テーマ (app.dart / router.dart / theme.dart)
+  core/                 # 横断的な基盤 (db, network, location, theme, utils, mock)
   features/<feature>/
-    data/               # Repository, Drift DAO, API クライアント
+    data/               # Repository, Drift DAO, API クライアント (実装後)
     models/             # Freezed モデル
-    presentation/       # Riverpod Notifier, Screen, Widget
+    presentation/       # Riverpod Provider/Notifier, Screen, Widget
   shared/widgets/       # features 横断の共通 UI
+  l10n/                 # app_ja.arb (gen/ は生成、コミットしない)
   main.dart
 test/
   features/<feature>/   # lib と対称な配置
 ```
 
-新機能を追加するときは、必ず `features/<feature>/` 配下に閉じる。core / shared は **既存機能を 2 つ以上が共有するようになってから** 抽出する (YAGNI)。
+現在の features:
+- `folders/` — フォルダ
+- `lists/` — リスト
+- `spots/` — スポット (検索・詳細)
+- `visits/` — 訪問履歴
+- `map/` — マップ画面
+- `home/` — ボトムナビ統合シェル
+- `settings/` — 設定
+
+ルール:
+- 新機能を追加するときは、必ず `features/<feature>/` 配下に閉じる。
+- core / shared は **既存機能を 2 つ以上が共有するようになってから** 抽出する (YAGNI)。
+- ユーザー管理タグの仕様廃止により `features/tags/` は **作らない**。
 
 ---
 
@@ -83,10 +103,23 @@ test/
 
 ---
 
-## 5. Riverpod パターン
+## 5. Riverpod パターン (Riverpod 3.x)
+
+### 5.1 書き方の使い分け
+
+| ケース | 書き方 |
+|---|---|
+| 非同期 (Repository / API)、Family、AsyncNotifier | **`@riverpod` codegen を使う** |
+| シンプルな同期 Notifier (状態あり、引数なし or 単純な family) | **plain `NotifierProvider`** OK |
+| 静的な派生値 (フィルタ後リストなど) | **plain `Provider`** OK |
+| `StateProvider` / `StateNotifierProvider` / `ChangeNotifierProvider` | **禁止** (旧 API) |
+
+codegen を強制しないのは、簡素な provider に build_runner のオーバーヘッドを払わないため。
+ただし、Repository / API / 永続化が絡む provider は **必ず** `@riverpod` codegen を使う (lifecycle/auto-dispose の正確性のため)。
+
+### 5.2 codegen 版サンプル (Repository を読む場合)
 
 ```dart
-// ✅ 推奨: code generation を使う
 @riverpod
 class SpotsNotifier extends _$SpotsNotifier {
   @override
@@ -104,8 +137,30 @@ class SpotsNotifier extends _$SpotsNotifier {
 }
 ```
 
-- `Provider` / `StateProvider` / `StateNotifierProvider` (旧 API) は使わない。`@riverpod` のみ。
+### 5.3 plain 版サンプル (モック・派生値)
+
+```dart
+// 派生 (読み取り専用)
+final visibleSpotsProvider = Provider<List<Spot>>((ref) {
+  final all = ref.watch(spotsNotifierProvider);
+  final filter = ref.watch(spotFilterProvider);
+  return all.where((s) => filter.matches(s)).toList();
+});
+
+// 同期状態
+class SpotFilterNotifier extends Notifier<SpotFilter> {
+  @override
+  SpotFilter build() => const SpotFilter();
+  void toggleCategory(SpotCategory c) { /* ... */ }
+}
+final spotFilterProvider =
+    NotifierProvider<SpotFilterNotifier, SpotFilter>(SpotFilterNotifier.new);
+```
+
+### 5.4 共通ルール
+
 - Family は必要なときだけ。引数なしで済むなら使わない。
+- `Future<void>` を返す Notifier メソッドは例外を投げる or `AsyncValue.guard` を使う (黙殺禁止)。
 
 ---
 
@@ -182,11 +237,14 @@ void main() {
 | `StatefulWidget` でビジネス状態を持つ | Riverpod の `Notifier` |
 | Repository を抽象クラス化 (`abstract class`) | 具象クラスで開始。差し替え必要が出てから抽出 |
 | `domain/` フォルダを作る | ロジックは Repository か Notifier に |
-| 文字列の直書き `Text('保存')` | `Text(loc.save)` |
+| `features/tags/` を作る | ユーザータグは仕様外。フォルダ・リストで整理 |
+| UI 文字列の直書き `Text('保存')` | `Text(l.commonSave)` (l = `AppLocalizations.of(context)`) |
+| `StateProvider` / `StateNotifierProvider` を使う | plain `NotifierProvider` か `@riverpod` codegen |
 | `try-catch` で例外を黙殺 | `AsyncValue.guard` か再 throw |
 | `print('debug')` | `debugPrint` または `logger` |
 | `dynamic` 型の濫用 | `Object?` + 型ガード、または専用型 |
 | 巨大な build メソッド (200 行超) | 子 Widget に分割 |
+| 生成ファイル (`*.freezed.dart`, `*.g.dart`, `lib/l10n/gen/`) をコミット | gitignore 済み。`flutter pub get` + `build_runner` で再生成 |
 
 ---
 
