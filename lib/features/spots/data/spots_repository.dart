@@ -23,6 +23,14 @@ class SpotsRepository {
     return row == null ? null : _toDomain(row);
   }
 
+  Future<Spot?> getByPlaceId(String placeId) async {
+    final query = _db.select(_db.spots)
+      ..where((t) => t.placeId.equals(placeId) & t.deletedAt.isNull())
+      ..limit(1);
+    final row = await query.getSingleOrNull();
+    return row == null ? null : _toDomain(row);
+  }
+
   Future<List<Spot>> listByListId(String listId) async {
     final spotIds =
         await (_db.select(_db.spotLists)

@@ -50,11 +50,98 @@ class PlacesApiClient {
     return PlaceDetails.fromJson(response.data!);
   }
 
+  /// テキスト検索。Places API (New) `places:searchText`。
+  /// 言語は ja、リージョン JP を明示。
+  Future<List<PlaceSearchResult>> searchText(
+    String query, {
+    int maxResults = 15,
+  }) async {
+    if (query.trim().isEmpty) return const [];
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/places:searchText',
+      data: {
+        'textQuery': query,
+        'languageCode': 'ja',
+        'regionCode': 'JP',
+        'maxResultCount': maxResults,
+      },
+      options: Options(
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': [
+            'places.id',
+            'places.displayName',
+            'places.formattedAddress',
+            'places.location',
+            'places.types',
+            'places.primaryType',
+            'places.rating',
+            'places.userRatingCount',
+            'places.photos.name',
+          ].join(','),
+        },
+      ),
+    );
+    final places = (response.data?['places'] as List<dynamic>?) ?? [];
+    return [
+      for (final p in places)
+        PlaceSearchResult.fromJson(p as Map<String, dynamic>),
+    ];
+  }
+
   /// 写真メディア URL (実際には別エンドポイント; アプリ側で組み立て)。
   String photoUrl(String photoName, {int maxWidthPx = 800}) {
     return 'https://places.googleapis.com/v1/$photoName/media'
         '?maxWidthPx=$maxWidthPx&key=$apiKey';
   }
+}
+
+class PlaceSearchResult {
+  PlaceSearchResult({
+    required this.placeId,
+    required this.name,
+    required this.lat,
+    required this.lng,
+    this.formattedAddress,
+    this.types = const [],
+    this.primaryType,
+    this.rating,
+    this.ratingCount,
+    this.photoNames = const [],
+  });
+
+  factory PlaceSearchResult.fromJson(Map<String, dynamic> json) {
+    final location = json['location'] as Map<String, dynamic>?;
+    return PlaceSearchResult(
+      placeId: json['id'] as String,
+      name:
+          (json['displayName'] as Map<String, dynamic>?)?['text'] as String? ??
+          '',
+      lat: (location?['latitude'] as num?)?.toDouble() ?? 0,
+      lng: (location?['longitude'] as num?)?.toDouble() ?? 0,
+      formattedAddress: json['formattedAddress'] as String?,
+      types: ((json['types'] as List<dynamic>?) ?? []).cast<String>(),
+      primaryType: json['primaryType'] as String?,
+      rating: (json['rating'] as num?)?.toDouble(),
+      ratingCount: json['userRatingCount'] as int?,
+      photoNames: [
+        for (final p in (json['photos'] as List<dynamic>?) ?? [])
+          if ((p as Map<String, dynamic>)['name'] is String)
+            p['name'] as String,
+      ],
+    );
+  }
+
+  final String placeId;
+  final String name;
+  final double lat;
+  final double lng;
+  final String? formattedAddress;
+  final List<String> types;
+  final String? primaryType;
+  final double? rating;
+  final int? ratingCount;
+  final List<String> photoNames;
 }
 
 /// Places API レスポンスの軽量モデル (Freezed を使わず手書きで dependencies を増やさない)。

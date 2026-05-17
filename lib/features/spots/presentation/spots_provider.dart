@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/database_provider.dart';
+import 'package:polaris/core/network/places_api_client.dart';
 import 'package:polaris/core/network/places_api_provider.dart';
+import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/data/spots_repository.dart';
 import 'package:polaris/features/spots/models/spot.dart';
@@ -42,6 +44,42 @@ class SpotsNotifier extends AsyncNotifier<List<Spot>> {
     final details = await client.details(spot.placeId);
     await repo.applyPlaceDetails(spotId, details);
     state = AsyncData(await repo.list());
+  }
+
+  /// Places 検索結果から新規スポットを DB に保存。
+  /// 既存 placeId なら何もせず、既存 Spot の id を返す。
+  /// 新規の場合は最低限のフィールドで insert → details 取得で上書き。
+  Future<String> saveFromPlace(PlaceSearchResult result) async {
+    final repo = ref.read(spotsRepositoryProvider);
+    final existing = await repo.getByPlaceId(result.placeId);
+    if (existing != null) return existing.id;
+
+    final id = newId();
+    final newSpot = Spot(
+      id: id,
+      placeId: result.placeId,
+      name: result.name,
+      lat: result.lat,
+      lng: result.lng,
+      address: result.formattedAddress,
+      rating: result.rating,
+      ratingCount: result.ratingCount,
+    );
+    await repo.upsert(newSpot);
+
+    // 取得できれば詳細で上書き (失敗してもスポット自体は残す)。
+    final client = ref.read(placesApiClientProvider);
+    if (client != null) {
+      try {
+        final details = await client.details(result.placeId);
+        await repo.applyPlaceDetails(id, details);
+      } on Exception {
+        // 通信失敗は無視。基本情報だけで保存される。
+      }
+    }
+
+    state = AsyncData(await repo.list());
+    return id;
   }
 }
 
