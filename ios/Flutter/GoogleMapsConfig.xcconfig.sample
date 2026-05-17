@@ -1,0 +1,5 @@
+// Google Maps API Key (iOS) — sample / template
+// Copy this file to GoogleMapsConfig.xcconfig and replace the value.
+// GoogleMapsConfig.xcconfig is gitignored.
+
+GOOGLE_MAPS_API_KEY=YOUR_IOS_API_KEY_HERE

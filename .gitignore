@@ -65,6 +65,10 @@ lib/generated_plugin_registrant.dart
 google-services.json
 GoogleService-Info.plist
 
+# API keys (per-platform secret config)
+ios/Flutter/GoogleMapsConfig.xcconfig
+android/local.properties
+
 # Generated code (regenerated via `dart run build_runner build`)
 **/*.freezed.dart
 **/*.g.dart

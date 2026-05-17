@@ -2,11 +2,17 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:polaris/features/map/presentation/widgets/fake_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 import 'package:polaris/features/spots/models/spot_category_x.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
+
+/// 初期カメラ位置 (東京駅周辺)。
+const _initialCamera = CameraPosition(
+  target: LatLng(35.6762, 139.6503),
+  zoom: 11,
+);
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -17,6 +23,42 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   String? _selectedSpotId;
+  GoogleMapController? _mapController;
+
+  @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _centerOnSpot(Spot spot) async {
+    final controller = _mapController;
+    if (controller == null) return;
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(spot.lat, spot.lng), 14),
+    );
+  }
+
+  Set<Marker> _buildMarkers(List<Spot> spots) {
+    return {
+      for (final s in spots)
+        Marker(
+          markerId: MarkerId(s.id),
+          position: LatLng(s.lat, s.lng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            _hueFor(s.primaryCategory),
+          ),
+          infoWindow: InfoWindow(
+            title: s.name,
+            snippet: s.address,
+            onTap: () => context.push('/spots/${s.id}'),
+          ),
+          onTap: () {
+            setState(() => _selectedSpotId = s.id);
+          },
+        ),
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,27 +71,37 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: FakeMap(
-              spots: spots,
-              selectedSpotId: _selectedSpotId,
-              onSpotTap: (s) => setState(() => _selectedSpotId = s.id),
+            child: GoogleMap(
+              initialCameraPosition: _initialCamera,
+              onMapCreated: (c) => _mapController = c,
+              markers: _buildMarkers(spots),
+              myLocationEnabled: false,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
+              compassEnabled: false,
+              // 上の検索バー・チップ分のスペースを地図のロゴ/コントロールが避けるように
+              padding: const EdgeInsets.only(top: 160, bottom: 200),
+              onTap: (_) => setState(() => _selectedSpotId = null),
             ),
           ),
           if (spots.isEmpty)
             Positioned.fill(
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: scheme.surface.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    l.mapEmpty,
-                    style: Theme.of(context).textTheme.bodyMedium,
+              child: IgnorePointer(
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: scheme.surface.withValues(alpha: 0.92),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      l.mapEmpty,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ),
               ),
@@ -81,7 +133,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           _BottomSpotStrip(
             spots: spots,
             selectedSpotId: _selectedSpotId,
-            onSelect: (s) => setState(() => _selectedSpotId = s.id),
+            onSelect: (s) async {
+              setState(() => _selectedSpotId = s.id);
+              await _centerOnSpot(s);
+            },
           ),
           Positioned(
             right: 16,
@@ -104,6 +159,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ],
       ),
     );
+  }
+}
+
+double _hueFor(SpotCategory c) {
+  switch (c) {
+    case SpotCategory.food:
+      return BitmapDescriptor.hueOrange;
+    case SpotCategory.entertainment:
+      return BitmapDescriptor.hueViolet;
+    case SpotCategory.sightseeing:
+      return BitmapDescriptor.hueCyan;
+    case SpotCategory.shopping:
+      return BitmapDescriptor.hueRose;
+    case SpotCategory.lodging:
+      return BitmapDescriptor.hueAzure;
+    case SpotCategory.other:
+      return BitmapDescriptor.hueYellow;
   }
 }
 
@@ -267,7 +339,7 @@ class _BottomSpotStrip extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: spots.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
           itemBuilder: (context, i) {
             final s = spots[i];
             return _SpotMiniCard(
@@ -301,7 +373,7 @@ class _SpotMiniCard extends StatelessWidget {
     return GestureDetector(
       onTap: () {
         onTap();
-        Future.delayed(const Duration(milliseconds: 160), () {
+        Future.delayed(const Duration(milliseconds: 200), () {
           if (context.mounted) {
             context.push('/spots/${spot.id}');
           }
@@ -338,7 +410,7 @@ class _SpotMiniCard extends StatelessWidget {
                       placeholder: (c, _) => Container(
                         color: scheme.surfaceContainerHighest,
                       ),
-                      errorWidget: (c, _, __) => Container(
+                      errorWidget: (c, _, _) => Container(
                         color: spot.primaryCategory.color.withValues(
                           alpha: 0.2,
                         ),
