@@ -258,28 +258,49 @@ class SpotDetailScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  Text(
-                    l.spotDetailMemoLabel,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        l.spotDetailMemoLabel,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.edit_outlined,
+                        size: 14,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerLow,
+                  Material(
+                    color: scheme.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      spot.userMemo ?? l.spotDetailMemoEmpty,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: spot.userMemo != null
-                            ? scheme.onSurface
-                            : scheme.onSurfaceVariant,
-                        fontStyle: spot.userMemo != null
-                            ? null
-                            : FontStyle.italic,
+                      onTap: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => _EditMemoDialog(
+                          spotId: spot.id,
+                          initialMemo: spot.userMemo,
+                        ),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        width: double.infinity,
+                        child: Text(
+                          spot.userMemo ?? l.spotDetailMemoEmpty,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: spot.userMemo != null
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
+                            fontStyle: spot.userMemo != null
+                                ? null
+                                : FontStyle.italic,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -453,6 +474,63 @@ Future<void> _showAddVisitSheet(
     showDragHandle: true,
     builder: (_) => _AddVisitSheet(spotId: spotId),
   );
+}
+
+class _EditMemoDialog extends ConsumerStatefulWidget {
+  const _EditMemoDialog({required this.spotId, this.initialMemo});
+  final String spotId;
+  final String? initialMemo;
+
+  @override
+  ConsumerState<_EditMemoDialog> createState() => _EditMemoDialogState();
+}
+
+class _EditMemoDialogState extends ConsumerState<_EditMemoDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialMemo ?? '');
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final value = _controller.text.trim();
+    await ref
+        .read(spotsNotifierProvider.notifier)
+        .updateMemo(widget.spotId, value.isEmpty ? null : value);
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('メモを編集'),
+      content: TextField(
+        controller: _controller,
+        maxLines: 5,
+        autofocus: true,
+        decoration: const InputDecoration(
+          hintText: 'このスポットに関するメモ',
+          border: OutlineInputBorder(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
 }
 
 class _SaveToListSheet extends ConsumerStatefulWidget {
