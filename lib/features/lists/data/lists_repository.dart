@@ -32,7 +32,9 @@ class ListsRepository {
 
   Future<void> insert(SpotList l) async {
     final ms = DateTime.now().millisecondsSinceEpoch;
-    await _db.into(_db.lists).insert(
+    await _db
+        .into(_db.lists)
+        .insert(
           ListsCompanion.insert(
             id: l.id,
             folderId: l.folderId,
@@ -94,9 +96,9 @@ class SpotListPairsRepository {
   final AppDatabase _db;
 
   Future<List<({String spotId, String listId})>> listAll() async {
-    final rows = await (_db.select(_db.spotLists)
-          ..where((t) => t.deletedAt.isNull()))
-        .get();
+    final rows = await (_db.select(
+      _db.spotLists,
+    )..where((t) => t.deletedAt.isNull())).get();
     return [
       for (final r in rows) (spotId: r.spotId, listId: r.listId),
     ];
@@ -104,12 +106,15 @@ class SpotListPairsRepository {
 
   Future<void> add(String spotId, String listId) async {
     final ms = DateTime.now().millisecondsSinceEpoch;
-    final maxOrder = await (_db.selectOnly(_db.spotLists)
-          ..addColumns([_db.spotLists.orderIndex.max()])
-          ..where(_db.spotLists.listId.equals(listId)))
-        .map((r) => r.read(_db.spotLists.orderIndex.max()) ?? -1)
-        .getSingle();
-    await _db.into(_db.spotLists).insert(
+    final maxOrder =
+        await (_db.selectOnly(_db.spotLists)
+              ..addColumns([_db.spotLists.orderIndex.max()])
+              ..where(_db.spotLists.listId.equals(listId)))
+            .map((r) => r.read(_db.spotLists.orderIndex.max()) ?? -1)
+            .getSingle();
+    await _db
+        .into(_db.spotLists)
+        .insert(
           SpotListsCompanion.insert(
             id: 'sl-$ms-$spotId-$listId',
             spotId: spotId,
@@ -124,13 +129,12 @@ class SpotListPairsRepository {
 
   Future<void> remove(String spotId, String listId) async {
     final ms = DateTime.now().millisecondsSinceEpoch;
-    await (_db.update(_db.spotLists)
-          ..where(
-            (t) =>
-                t.spotId.equals(spotId) &
-                t.listId.equals(listId) &
-                t.deletedAt.isNull(),
-          ))
+    await (_db.update(_db.spotLists)..where(
+          (t) =>
+              t.spotId.equals(spotId) &
+              t.listId.equals(listId) &
+              t.deletedAt.isNull(),
+        ))
         .write(SpotListsCompanion(deletedAt: Value(ms), updatedAt: Value(ms)));
   }
 }

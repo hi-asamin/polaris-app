@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/models/spot_list.dart';
@@ -31,6 +32,14 @@ class FolderDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: scheme.surface,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showDialog<void>(
+          context: context,
+          builder: (_) => _CreateListDialog(folderId: folderId),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('リストを追加'),
+      ),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
@@ -228,7 +237,13 @@ class _FavoriteListCard extends ConsumerWidget {
                   ),
                 ),
                 InkResponse(
-                  onTap: () {},
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) => _DeleteListDialog(
+                      listId: list.id,
+                      listName: list.name,
+                    ),
+                  ),
                   radius: 18,
                   child: Padding(
                     padding: const EdgeInsets.all(4),
@@ -252,6 +267,109 @@ class _FavoriteListCard extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _CreateListDialog extends ConsumerStatefulWidget {
+  const _CreateListDialog({required this.folderId});
+  final String folderId;
+
+  @override
+  ConsumerState<_CreateListDialog> createState() => _CreateListDialogState();
+}
+
+class _CreateListDialogState extends ConsumerState<_CreateListDialog> {
+  final _controller = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _controller.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _submitting = true);
+    final existing = ref.read(listsByFolderProvider(widget.folderId));
+    final nextOrder = existing.isEmpty
+        ? 0
+        : existing.map((l) => l.orderIndex).reduce((a, b) => a > b ? a : b) + 1;
+    final list = SpotList(
+      id: newId(),
+      folderId: widget.folderId,
+      name: name,
+      orderIndex: nextOrder,
+    );
+    await ref.read(listsNotifierProvider.notifier).create(list);
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('リストを作成'),
+      content: TextField(
+        controller: _controller,
+        maxLength: 25,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'リスト名を入力'),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: const Text('作成'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteListDialog extends ConsumerWidget {
+  const _DeleteListDialog({required this.listId, required this.listName});
+  final String listId;
+  final String listName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AlertDialog(
+      title: const Text('リストを削除'),
+      content: Text.rich(
+        TextSpan(
+          children: [
+            const TextSpan(text: 'リスト「'),
+            TextSpan(
+              text: listName,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const TextSpan(text: '」を削除してもよろしいですか？'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: () async {
+            await ref.read(listsNotifierProvider.notifier).deleteList(listId);
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('削除'),
+        ),
+      ],
     );
   }
 }

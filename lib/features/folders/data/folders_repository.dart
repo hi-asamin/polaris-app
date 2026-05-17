@@ -24,7 +24,9 @@ class FoldersRepository {
 
   Future<void> insert(Folder f) async {
     final ms = f.updatedAt.millisecondsSinceEpoch;
-    await _db.into(_db.folders).insert(
+    await _db
+        .into(_db.folders)
+        .insert(
           FoldersCompanion.insert(
             id: f.id,
             name: f.name,

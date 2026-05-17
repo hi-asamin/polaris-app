@@ -2,9 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 import 'package:polaris/features/spots/models/spot_category_x.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
+import 'package:polaris/features/visits/models/visit.dart';
 import 'package:polaris/features/visits/presentation/visits_provider.dart';
 import 'package:polaris/features/visits/presentation/widgets/visit_tile.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
@@ -233,7 +235,10 @@ class SpotDetailScreen extends ConsumerWidget {
                         child: FilledButton.icon(
                           icon: const Icon(Icons.add_circle_outline),
                           label: Text(l.spotDetailAddVisit),
-                          onPressed: () {},
+                          onPressed: () => _showAddVisitSheet(
+                            context,
+                            spotId: spot.id,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -425,6 +430,220 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+Future<void> _showAddVisitSheet(
+  BuildContext context, {
+  required String spotId,
+}) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => _AddVisitSheet(spotId: spotId),
+  );
+}
+
+class _AddVisitSheet extends ConsumerStatefulWidget {
+  const _AddVisitSheet({required this.spotId});
+  final String spotId;
+
+  @override
+  ConsumerState<_AddVisitSheet> createState() => _AddVisitSheetState();
+}
+
+class _AddVisitSheetState extends ConsumerState<_AddVisitSheet> {
+  DateTime _visitedAt = DateTime.now();
+  int? _rating;
+  final _memoController = TextEditingController();
+  final _companionsController = TextEditingController();
+  final _costController = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _memoController.dispose();
+    _companionsController.dispose();
+    _costController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _visitedAt,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked == null) return;
+    setState(() {
+      _visitedAt = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        _visitedAt.hour,
+        _visitedAt.minute,
+      );
+    });
+  }
+
+  Future<void> _submit() async {
+    setState(() => _submitting = true);
+    final cost = int.tryParse(_costController.text.trim());
+    final visit = Visit(
+      id: newId(),
+      spotId: widget.spotId,
+      visitedAt: _visitedAt,
+      memo: _memoController.text.trim().isEmpty
+          ? null
+          : _memoController.text.trim(),
+      rating: _rating,
+      companions: _companionsController.text.trim().isEmpty
+          ? null
+          : _companionsController.text.trim(),
+      costJpy: cost,
+    );
+    await ref.read(visitsNotifierProvider.notifier).create(visit);
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final dateFmt = DateFormat('y年M月d日 (E)', 'ja');
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        bottom: 20 + bottomInset,
+        top: 4,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '訪問を記録',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_outlined,
+                      color: scheme.onSurfaceVariant,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      dateFmt.format(_visitedAt),
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const Spacer(),
+                    Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '評価',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                for (var i = 1; i <= 5; i++)
+                  IconButton(
+                    iconSize: 32,
+                    onPressed: () => setState(
+                      () => _rating = _rating == i ? null : i,
+                    ),
+                    icon: Icon(
+                      (_rating ?? 0) >= i
+                          ? Icons.star_rounded
+                          : Icons.star_border_rounded,
+                      color: const Color(0xFFFFC107),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _memoController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'メモ',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _companionsController,
+              decoration: const InputDecoration(
+                hintText: '同行者 (例: 家族・友人 2名)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _costController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: '金額 (円)',
+                border: OutlineInputBorder(),
+                prefixText: '¥ ',
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _submitting
+                        ? null
+                        : () => Navigator.pop(context),
+                    child: const Text('キャンセル'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _submitting ? null : _submit,
+                    child: const Text('保存'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

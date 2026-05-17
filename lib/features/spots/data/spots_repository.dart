@@ -9,8 +9,7 @@ class SpotsRepository {
   final AppDatabase _db;
 
   Future<List<Spot>> list() async {
-    final query = _db.select(_db.spots)
-      ..where((t) => t.deletedAt.isNull());
+    final query = _db.select(_db.spots)..where((t) => t.deletedAt.isNull());
     final rows = await query.get();
     return rows.map(_toDomain).toList();
   }
@@ -24,14 +23,15 @@ class SpotsRepository {
   }
 
   Future<List<Spot>> listByListId(String listId) async {
-    final spotIds = await (_db.select(_db.spotLists)
-          ..where((t) => t.listId.equals(listId) & t.deletedAt.isNull()))
-        .map((r) => r.spotId)
-        .get();
+    final spotIds =
+        await (_db.select(_db.spotLists)
+              ..where((t) => t.listId.equals(listId) & t.deletedAt.isNull()))
+            .map((r) => r.spotId)
+            .get();
     if (spotIds.isEmpty) return const [];
-    final rows = await (_db.select(_db.spots)
-          ..where((t) => t.id.isIn(spotIds) & t.deletedAt.isNull()))
-        .get();
+    final rows = await (_db.select(
+      _db.spots,
+    )..where((t) => t.id.isIn(spotIds) & t.deletedAt.isNull())).get();
     return rows.map(_toDomain).toList();
   }
 

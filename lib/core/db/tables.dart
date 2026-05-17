@@ -59,8 +59,7 @@ class Spots extends Table {
   IntColumn get ratingCount => integer().nullable()();
   IntColumn get priceLevel => integer().nullable()();
   TextColumn get userMemo => text().nullable()();
-  BoolColumn get wantToVisit =>
-      boolean().withDefault(const Constant(false))();
+  BoolColumn get wantToVisit => boolean().withDefault(const Constant(false))();
   IntColumn get lastPlaceSyncedAt => integer()();
   IntColumn get createdAt => integer()();
   IntColumn get updatedAt => integer()();
@@ -71,8 +70,8 @@ class Spots extends Table {
 
   @override
   List<Set<Column>> get uniqueKeys => [
-        {placeId},
-      ];
+    {placeId},
+  ];
 }
 
 @DataClassName('SpotListPairRow')

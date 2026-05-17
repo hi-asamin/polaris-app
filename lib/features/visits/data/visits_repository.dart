@@ -26,7 +26,9 @@ class VisitsRepository {
 
   Future<void> insert(Visit v) async {
     final ms = DateTime.now().millisecondsSinceEpoch;
-    await _db.into(_db.visits).insert(
+    await _db
+        .into(_db.visits)
+        .insert(
           VisitsCompanion.insert(
             id: v.id,
             spotId: v.spotId,

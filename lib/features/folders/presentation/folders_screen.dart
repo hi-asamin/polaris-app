@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/models/folder.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
@@ -226,7 +227,11 @@ class _FavoriteFolderCard extends ConsumerWidget {
                   ),
                 ),
                 InkResponse(
-                  onTap: () => _showDeleteFolderDialog(context, folder.name),
+                  onTap: () => _showDeleteFolderDialog(
+                    context,
+                    folder.id,
+                    folder.name,
+                  ),
                   radius: 18,
                   child: Padding(
                     padding: const EdgeInsets.all(4),
@@ -307,85 +312,139 @@ class _Empty extends StatelessWidget {
 }
 
 Future<void> _showCreateFolderDialog(BuildContext context) async {
-  final l = AppLocalizations.of(context);
-  final controller = TextEditingController();
   await showDialog<void>(
     context: context,
-    builder: (ctx) {
-      return AlertDialog(
-        title: const Text('フォルダを作成'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: controller,
-              maxLength: 25,
-              decoration: const InputDecoration(
-                hintText: 'フォルダ名を入力',
-              ),
-              autofocus: true,
-            ),
-            Text(
-              '25文字まで入力可能です',
-              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l.filterCancel),
+    builder: (ctx) => const _CreateFolderDialog(),
+  );
+}
+
+class _CreateFolderDialog extends ConsumerStatefulWidget {
+  const _CreateFolderDialog();
+
+  @override
+  ConsumerState<_CreateFolderDialog> createState() =>
+      _CreateFolderDialogState();
+}
+
+class _CreateFolderDialogState extends ConsumerState<_CreateFolderDialog> {
+  final _controller = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final name = _controller.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _submitting = true);
+    final folders = ref.read(foldersProvider);
+    final nextOrder = folders.isEmpty
+        ? 0
+        : folders.map((f) => f.orderIndex).reduce((a, b) => a > b ? a : b) + 1;
+    final folder = Folder(
+      id: newId(),
+      name: name,
+      orderIndex: nextOrder,
+      updatedAt: DateTime.now(),
+    );
+    await ref.read(foldersNotifierProvider.notifier).create(folder);
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return AlertDialog(
+      title: const Text('フォルダを作成'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _controller,
+            maxLength: 25,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'フォルダ名を入力'),
+            onSubmitted: (_) => _submit(),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('作成'),
+          Text(
+            '25文字まで入力可能です',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
-      );
-    },
-  );
-  controller.dispose();
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: Text(l.filterCancel),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: const Text('作成'),
+        ),
+      ],
+    );
+  }
 }
 
 Future<void> _showDeleteFolderDialog(
   BuildContext context,
+  String folderId,
   String folderName,
 ) async {
-  final l = AppLocalizations.of(context);
   await showDialog<void>(
     context: context,
-    builder: (ctx) {
-      return AlertDialog(
-        title: const Text('フォルダを削除'),
-        content: Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(text: 'フォルダ「'),
-              TextSpan(
-                text: folderName,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const TextSpan(text: '」を削除してもよろしいですか？'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(l.filterCancel),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('削除'),
-          ),
-        ],
-      );
-    },
+    builder: (ctx) =>
+        _DeleteFolderDialog(folderId: folderId, folderName: folderName),
   );
+}
+
+class _DeleteFolderDialog extends ConsumerWidget {
+  const _DeleteFolderDialog({required this.folderId, required this.folderName});
+  final String folderId;
+  final String folderName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context);
+    return AlertDialog(
+      title: const Text('フォルダを削除'),
+      content: Text.rich(
+        TextSpan(
+          children: [
+            const TextSpan(text: 'フォルダ「'),
+            TextSpan(
+              text: folderName,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const TextSpan(text: '」を削除してもよろしいですか？'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l.filterCancel),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: () async {
+            await ref
+                .read(foldersNotifierProvider.notifier)
+                .deleteFolder(folderId);
+            if (context.mounted) Navigator.pop(context);
+          },
+          child: const Text('削除'),
+        ),
+      ],
+    );
+  }
 }

@@ -28,8 +28,9 @@ class SpotsNotifier extends AsyncNotifier<List<Spot>> {
   }
 }
 
-final spotsNotifierProvider =
-    AsyncNotifierProvider<SpotsNotifier, List<Spot>>(SpotsNotifier.new);
+final spotsNotifierProvider = AsyncNotifierProvider<SpotsNotifier, List<Spot>>(
+  SpotsNotifier.new,
+);
 
 final allSpotsProvider = Provider<List<Spot>>((ref) {
   return ref.watch(spotsNotifierProvider).value ?? const [];

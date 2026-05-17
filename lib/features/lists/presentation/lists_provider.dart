@@ -84,13 +84,15 @@ class SpotListPairsNotifier
   }
 }
 
-final spotListPairsNotifierProvider = AsyncNotifierProvider<
-  SpotListPairsNotifier,
-  List<({String spotId, String listId})>
->(SpotListPairsNotifier.new);
+final spotListPairsNotifierProvider =
+    AsyncNotifierProvider<
+      SpotListPairsNotifier,
+      List<({String spotId, String listId})>
+    >(SpotListPairsNotifier.new);
 
-final spotListPairsProvider =
-    Provider<List<({String spotId, String listId})>>((ref) {
+final spotListPairsProvider = Provider<List<({String spotId, String listId})>>((
+  ref,
+) {
   return ref.watch(spotListPairsNotifierProvider).value ?? const [];
 });
 

@@ -79,8 +79,7 @@ class AccountScreen extends ConsumerWidget {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(2, 2, 2, 32),
                 sliver: SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
                     crossAxisSpacing: 2,
                     mainAxisSpacing: 2,
@@ -136,8 +135,14 @@ class _ProfileHeader extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _StatCounter(value: visitsCount, label: l.accountStatsVisits),
-                    _StatCounter(value: foldersCount, label: l.accountStatsFolders),
+                    _StatCounter(
+                      value: visitsCount,
+                      label: l.accountStatsVisits,
+                    ),
+                    _StatCounter(
+                      value: foldersCount,
+                      label: l.accountStatsFolders,
+                    ),
                     _StatCounter(value: listsCount, label: l.accountStatsLists),
                   ],
                 ),

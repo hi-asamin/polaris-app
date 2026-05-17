@@ -43,23 +43,34 @@ class PhotoCollage extends StatelessWidget {
     if (photos.length == 2) {
       return Row(
         children: [
-          Expanded(child: _Photo(url: photos[0], bg: bg)),
+          Expanded(
+            child: _Photo(url: photos[0], bg: bg),
+          ),
           SizedBox(width: gap),
-          Expanded(child: _Photo(url: photos[1], bg: bg)),
+          Expanded(
+            child: _Photo(url: photos[1], bg: bg),
+          ),
         ],
       );
     }
     if (photos.length == 3) {
       return Row(
         children: [
-          Expanded(flex: 2, child: _Photo(url: photos[0], bg: bg)),
+          Expanded(
+            flex: 2,
+            child: _Photo(url: photos[0], bg: bg),
+          ),
           SizedBox(width: gap),
           Expanded(
             child: Column(
               children: [
-                Expanded(child: _Photo(url: photos[1], bg: bg)),
+                Expanded(
+                  child: _Photo(url: photos[1], bg: bg),
+                ),
                 SizedBox(height: gap),
-                Expanded(child: _Photo(url: photos[2], bg: bg)),
+                Expanded(
+                  child: _Photo(url: photos[2], bg: bg),
+                ),
               ],
             ),
           ),
@@ -69,16 +80,25 @@ class PhotoCollage extends StatelessWidget {
     // 4+
     return Row(
       children: [
-        Expanded(flex: 2, child: _Photo(url: photos[0], bg: bg)),
+        Expanded(
+          flex: 2,
+          child: _Photo(url: photos[0], bg: bg),
+        ),
         SizedBox(width: gap),
         Expanded(
           child: Column(
             children: [
-              Expanded(child: _Photo(url: photos[1], bg: bg)),
+              Expanded(
+                child: _Photo(url: photos[1], bg: bg),
+              ),
               SizedBox(height: gap),
-              Expanded(child: _Photo(url: photos[2], bg: bg)),
+              Expanded(
+                child: _Photo(url: photos[2], bg: bg),
+              ),
               SizedBox(height: gap),
-              Expanded(child: _Photo(url: photos[3], bg: bg)),
+              Expanded(
+                child: _Photo(url: photos[3], bg: bg),
+              ),
             ],
           ),
         ),
