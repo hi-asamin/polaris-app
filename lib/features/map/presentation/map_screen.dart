@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:polaris/core/location/location_service.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 import 'package:polaris/features/spots/models/spot_category_x.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
@@ -36,6 +37,23 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (controller == null) return;
     await controller.animateCamera(
       CameraUpdate.newLatLngZoom(LatLng(spot.lat, spot.lng), 14),
+    );
+  }
+
+  Future<void> _centerOnCurrentLocation() async {
+    final controller = _mapController;
+    if (controller == null) return;
+    final pos = await ref.read(locationServiceProvider).getCurrentPosition();
+    if (pos == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('現在地を取得できませんでした')),
+        );
+      }
+      return;
+    }
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(pos.latitude, pos.longitude), 14),
     );
   }
 
@@ -75,7 +93,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               initialCameraPosition: _initialCamera,
               onMapCreated: (c) => _mapController = c,
               markers: _buildMarkers(spots),
-              myLocationEnabled: false,
+              myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
               mapToolbarEnabled: false,
@@ -145,7 +163,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               children: [
                 _MiniFab(
                   icon: Icons.my_location,
-                  onPressed: () {},
+                  onPressed: _centerOnCurrentLocation,
                 ),
                 const SizedBox(height: 12),
                 FloatingActionButton(
