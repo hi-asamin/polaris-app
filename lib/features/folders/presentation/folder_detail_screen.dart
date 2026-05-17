@@ -78,7 +78,7 @@ class FolderDetailScreen extends ConsumerWidget {
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.78,
+                  childAspectRatio: 1,
                   crossAxisSpacing: 4,
                   mainAxisSpacing: 8,
                 ),
@@ -199,10 +199,9 @@ class _FavoriteListCard extends ConsumerWidget {
         padding: const EdgeInsets.all(6),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
             AspectRatio(
-              aspectRatio: 1,
+              aspectRatio: 3 / 2,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: ColoredBox(
@@ -215,7 +214,7 @@ class _FavoriteListCard extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const Spacer(),
             Row(
               children: [
                 Expanded(
