@@ -1,22 +1,43 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:polaris/core/mock/mock_data.dart';
+import 'package:polaris/core/db/database_provider.dart';
+import 'package:polaris/features/visits/data/visits_repository.dart';
 import 'package:polaris/features/visits/models/visit.dart';
 
-class VisitsNotifier extends Notifier<List<Visit>> {
+final visitsRepositoryProvider = Provider<VisitsRepository>((ref) {
+  return VisitsRepository(ref.watch(databaseProvider));
+});
+
+class VisitsNotifier extends AsyncNotifier<List<Visit>> {
   @override
-  List<Visit> build() {
-    final list = [...MockData.visits]
-      ..sort((a, b) => b.visitedAt.compareTo(a.visitedAt));
-    return list;
+  Future<List<Visit>> build() async {
+    final repo = ref.watch(visitsRepositoryProvider);
+    return repo.list();
+  }
+
+  Future<void> create(Visit v) async {
+    final repo = ref.read(visitsRepositoryProvider);
+    await repo.insert(v);
+    state = AsyncData(await repo.list());
+  }
+
+  Future<void> updateVisit(Visit v) async {
+    final repo = ref.read(visitsRepositoryProvider);
+    await repo.update(v);
+    state = AsyncData(await repo.list());
+  }
+
+  Future<void> deleteVisit(String id) async {
+    final repo = ref.read(visitsRepositoryProvider);
+    await repo.softDelete(id);
+    state = AsyncData(await repo.list());
   }
 }
 
-final visitsNotifierProvider = NotifierProvider<VisitsNotifier, List<Visit>>(
-  VisitsNotifier.new,
-);
+final visitsNotifierProvider =
+    AsyncNotifierProvider<VisitsNotifier, List<Visit>>(VisitsNotifier.new);
 
 final allVisitsProvider = Provider<List<Visit>>((ref) {
-  return ref.watch(visitsNotifierProvider);
+  return ref.watch(visitsNotifierProvider).value ?? const [];
 });
 
 final visitsBySpotProvider = Provider.family<List<Visit>, String>((

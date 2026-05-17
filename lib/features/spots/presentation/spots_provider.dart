@@ -1,35 +1,38 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:polaris/core/mock/mock_data.dart';
+import 'package:polaris/core/db/database_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
+import 'package:polaris/features/spots/data/spots_repository.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 
-class SpotsNotifier extends Notifier<List<Spot>> {
+final spotsRepositoryProvider = Provider<SpotsRepository>((ref) {
+  return SpotsRepository(ref.watch(databaseProvider));
+});
+
+class SpotsNotifier extends AsyncNotifier<List<Spot>> {
   @override
-  List<Spot> build() {
-    return [...MockData.spots];
+  Future<List<Spot>> build() async {
+    final repo = ref.watch(spotsRepositoryProvider);
+    return repo.list();
   }
 
-  void toggleWantToVisit(String spotId) {
-    state = [
-      for (final s in state)
-        if (s.id == spotId) s.copyWith(wantToVisit: !s.wantToVisit) else s,
-    ];
+  Future<void> toggleWantToVisit(String spotId) async {
+    final repo = ref.read(spotsRepositoryProvider);
+    await repo.toggleWantToVisit(spotId);
+    state = AsyncData(await repo.list());
   }
 
-  void updateMemo(String spotId, String? memo) {
-    state = [
-      for (final s in state)
-        if (s.id == spotId) s.copyWith(userMemo: memo) else s,
-    ];
+  Future<void> updateMemo(String spotId, String? memo) async {
+    final repo = ref.read(spotsRepositoryProvider);
+    await repo.updateMemo(spotId, memo);
+    state = AsyncData(await repo.list());
   }
 }
 
-final spotsNotifierProvider = NotifierProvider<SpotsNotifier, List<Spot>>(
-  SpotsNotifier.new,
-);
+final spotsNotifierProvider =
+    AsyncNotifierProvider<SpotsNotifier, List<Spot>>(SpotsNotifier.new);
 
 final allSpotsProvider = Provider<List<Spot>>((ref) {
-  return ref.watch(spotsNotifierProvider);
+  return ref.watch(spotsNotifierProvider).value ?? const [];
 });
 
 final spotByIdProvider = Provider.family<Spot?, String>((ref, id) {
