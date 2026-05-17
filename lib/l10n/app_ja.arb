@@ -5,7 +5,18 @@
   "tabMap": "マップ",
   "tabLists": "リスト",
   "tabVisits": "訪問履歴",
+  "tabAccount": "アカウント",
   "tabSettings": "設定",
+
+  "accountTitle": "アカウント",
+  "accountGuestName": "ゲスト",
+  "accountTagline": "行きたい場所を集めて、おでかけを記録しよう",
+  "accountStatsVisits": "訪問",
+  "accountStatsFolders": "フォルダ",
+  "accountStatsLists": "リスト",
+  "accountEditProfile": "プロフィールを編集",
+  "accountShare": "シェア",
+  "accountActivityEmpty": "保存したスポットがここに並びます",
 
   "mapTitle": "マップ",
   "mapSearchHint": "場所を検索",

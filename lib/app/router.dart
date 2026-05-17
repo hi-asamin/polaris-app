@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/features/account/presentation/account_screen.dart';
 import 'package:polaris/features/folders/presentation/folder_detail_screen.dart';
 import 'package:polaris/features/folders/presentation/folders_screen.dart';
 import 'package:polaris/features/home/presentation/home_shell.dart';
@@ -15,7 +16,7 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
 final _listsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'lists');
 final _visitsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'visits');
-final _settingsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'settings');
+final _accountNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'account');
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -66,12 +67,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
           StatefulShellBranch(
-            navigatorKey: _settingsNavigatorKey,
+            navigatorKey: _accountNavigatorKey,
             routes: [
               GoRoute(
-                path: '/settings',
-                name: 'settings',
-                builder: (context, state) => const SettingsScreen(),
+                path: '/account',
+                name: 'account',
+                builder: (context, state) => const AccountScreen(),
               ),
             ],
           ),
@@ -99,6 +100,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'search',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );
