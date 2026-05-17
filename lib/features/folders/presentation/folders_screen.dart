@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +5,7 @@ import 'package:polaris/features/folders/models/folder.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
+import 'package:polaris/shared/widgets/photo_collage.dart';
 
 class FoldersScreen extends ConsumerWidget {
   const FoldersScreen({super.key});
@@ -16,185 +16,186 @@ class FoldersScreen extends ConsumerWidget {
     final folders = ref.watch(foldersProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l.foldersTitle),
-        actions: [
-          IconButton(
-            tooltip: l.foldersNew,
-            onPressed: () {},
-            icon: const Icon(Icons.create_new_folder_outlined),
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          SliverAppBar.large(
+            title: Text(l.foldersTitle),
+            pinned: true,
+            actions: [
+              IconButton(
+                tooltip: l.searchTitle,
+                onPressed: () => context.push('/search'),
+                icon: const Icon(Icons.search_rounded),
+              ),
+              IconButton(
+                tooltip: l.foldersNew,
+                onPressed: () {},
+                icon: const Icon(Icons.add_rounded),
+              ),
+              const SizedBox(width: 4),
+            ],
           ),
+          if (folders.isEmpty)
+            SliverFillRemaining(child: _Empty(l: l))
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.78,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 18,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) => _PinterestFolderCard(folder: folders[i]),
+                  childCount: folders.length,
+                ),
+              ),
+            ),
         ],
       ),
-      body: folders.isEmpty
-          ? _Empty(l: l)
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              itemCount: folders.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) {
-                final f = folders[i];
-                return _FolderCard(
-                  folder: f,
-                  onTap: () => context.push('/folders/${f.id}'),
-                );
-              },
-            ),
     );
   }
 }
 
-class _FolderCard extends ConsumerWidget {
-  const _FolderCard({required this.folder, required this.onTap});
+class _PinterestFolderCard extends ConsumerWidget {
+  const _PinterestFolderCard({required this.folder});
   final Folder folder;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-    final lists = ref.watch(listsByFolderProvider(folder.id));
+    final photos = ref.watch(folderCoverPhotosProvider(folder.id));
     final spotCount = ref.watch(spotsCountByFolderProvider(folder.id));
-    final l = AppLocalizations.of(context);
-    final color = folder.colorValue != null
+    final lists = ref.watch(listsByFolderProvider(folder.id));
+    final accent = folder.colorValue != null
         ? Color(folder.colorValue!)
         : scheme.primary;
 
-    return Material(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(20),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return GestureDetector(
+      onTap: () => context.push('/folders/${folder.id}'),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            SizedBox(
-              height: 120,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (folder.coverPhotoUrl != null)
-                    CachedNetworkImage(
-                      imageUrl: folder.coverPhotoUrl!,
-                      fit: BoxFit.cover,
-                      placeholder: (c, _) =>
-                          Container(color: color.withValues(alpha: 0.2)),
-                      errorWidget: (c, _, __) =>
-                          Container(color: color.withValues(alpha: 0.2)),
-                    )
-                  else
-                    Container(color: color.withValues(alpha: 0.2)),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.55),
-                        ],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 16,
-                    bottom: 12,
-                    right: 16,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          folder.name,
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${l.folderListsCount(lists.length)}・${l.folderSpotsCount(spotCount)}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _iconFor(folder.iconName),
-                        size: 18,
-                        color: color,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            PhotoCollage(
+              photos: photos,
+              fallbackColor: accent.withValues(alpha: 0.18),
+              fallbackIcon: _iconFor(folder.iconName),
             ),
-            if (lists.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final list in lists.take(4))
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _iconFor(list.iconName),
-                              size: 14,
-                              color: list.colorValue != null
-                                  ? Color(list.colorValue!)
-                                  : scheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(list.name, style: theme.textTheme.bodySmall),
-                          ],
-                        ),
-                      ),
-                    if (lists.length > 4)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.surfaceContainerHigh,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '+${lists.length - 4}',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
+            // 上から下への暗いグラデーション (テキストの可読性確保)
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0, 0.55, 1],
+                  colors: [
+                    Color(0x00000000),
+                    Color(0x33000000),
+                    Color(0xCC000000),
                   ],
                 ),
               ),
+            ),
+            // メタ情報のチップ (右上)
+            Positioned(
+              top: 10,
+              left: 10,
+              child: _FolderBadge(
+                icon: _iconFor(folder.iconName),
+                color: accent,
+              ),
+            ),
+            // タイトル + サブテキスト
+            Positioned(
+              left: 14,
+              right: 14,
+              bottom: 14,
+              child: _FolderCaption(
+                name: folder.name,
+                lists: lists.length,
+                spots: spotCount,
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FolderBadge extends StatelessWidget {
+  const _FolderBadge({required this.icon, required this.color});
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Icon(icon, size: 18, color: color),
+    );
+  }
+}
+
+class _FolderCaption extends StatelessWidget {
+  const _FolderCaption({
+    required this.name,
+    required this.lists,
+    required this.spots,
+  });
+  final String name;
+  final int lists;
+  final int spots;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            height: 1.15,
+            letterSpacing: -0.2,
+            shadows: [
+              Shadow(blurRadius: 8, color: Color(0x66000000)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$spots件 ・ $listsリスト',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.88),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.1,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -238,9 +239,24 @@ class _Empty extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.folder_open, size: 56, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(l.folderEmpty, style: Theme.of(context).textTheme.titleMedium),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(
+              Icons.folder_open_rounded,
+              size: 40,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l.folderEmpty,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
           Text(
             l.folderEmptyHint,
