@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/database_provider.dart';
+import 'package:polaris/core/network/places_api_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/data/spots_repository.dart';
 import 'package:polaris/features/spots/models/spot.dart';
@@ -24,6 +25,22 @@ class SpotsNotifier extends AsyncNotifier<List<Spot>> {
   Future<void> updateMemo(String spotId, String? memo) async {
     final repo = ref.read(spotsRepositoryProvider);
     await repo.updateMemo(spotId, memo);
+    state = AsyncData(await repo.list());
+  }
+
+  /// Places API から最新詳細を取得して上書き。
+  /// API キーが未設定 / Place ID が無効 / 通信エラーは [Exception] を throw する。
+  Future<void> refreshFromPlaces(String spotId) async {
+    final client = ref.read(placesApiClientProvider);
+    if (client == null) {
+      throw Exception('Places API key is not configured');
+    }
+    final repo = ref.read(spotsRepositoryProvider);
+    final spot = await repo.getById(spotId);
+    if (spot == null) throw Exception('Spot not found');
+
+    final details = await client.details(spot.placeId);
+    await repo.applyPlaceDetails(spotId, details);
     state = AsyncData(await repo.list());
   }
 }

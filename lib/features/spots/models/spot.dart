@@ -31,6 +31,8 @@ abstract class Spot with _$Spot {
     int? ratingCount,
     int? priceLevel,
     String? userMemo,
+    String? editorialSummary,
+    String? googleMapsUri,
     @Default(false) bool wantToVisit,
   }) = _Spot;
 }

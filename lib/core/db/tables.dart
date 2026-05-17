@@ -59,6 +59,8 @@ class Spots extends Table {
   IntColumn get ratingCount => integer().nullable()();
   IntColumn get priceLevel => integer().nullable()();
   TextColumn get userMemo => text().nullable()();
+  TextColumn get editorialSummary => text().nullable()();
+  TextColumn get googleMapsUri => text().nullable()();
   BoolColumn get wantToVisit => boolean().withDefault(const Constant(false))();
   IntColumn get lastPlaceSyncedAt => integer()();
   IntColumn get createdAt => integer()();

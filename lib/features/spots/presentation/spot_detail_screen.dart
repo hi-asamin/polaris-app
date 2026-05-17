@@ -64,6 +64,7 @@ class SpotDetailScreen extends ConsumerWidget {
                 ),
                 icon: const Icon(Icons.bookmark_add_outlined),
               ),
+              _RefreshFromPlacesButton(spotId: spot.id),
               IconButton(
                 onPressed: () {},
                 icon: const Icon(Icons.more_vert),
@@ -207,6 +208,46 @@ class SpotDetailScreen extends ConsumerWidget {
                           ),
                         ],
                       ],
+                    ),
+                  ],
+                  if (spot.editorialSummary != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.auto_awesome,
+                                size: 14,
+                                color: scheme.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Google による説明',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            spot.editorialSummary!,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                   const SizedBox(height: 16),
@@ -474,6 +515,56 @@ Future<void> _showAddVisitSheet(
     showDragHandle: true,
     builder: (_) => _AddVisitSheet(spotId: spotId),
   );
+}
+
+class _RefreshFromPlacesButton extends ConsumerStatefulWidget {
+  const _RefreshFromPlacesButton({required this.spotId});
+  final String spotId;
+
+  @override
+  ConsumerState<_RefreshFromPlacesButton> createState() =>
+      _RefreshFromPlacesButtonState();
+}
+
+class _RefreshFromPlacesButtonState
+    extends ConsumerState<_RefreshFromPlacesButton> {
+  bool _loading = false;
+
+  Future<void> _refresh() async {
+    setState(() => _loading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(spotsNotifierProvider.notifier)
+          .refreshFromPlaces(widget.spotId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Google から最新情報を取得しました')),
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('更新に失敗しました: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Google から更新',
+      onPressed: _loading ? null : _refresh,
+      icon: _loading
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.cloud_sync_outlined),
+    );
+  }
 }
 
 class _EditMemoDialog extends ConsumerStatefulWidget {
