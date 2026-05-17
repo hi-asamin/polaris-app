@@ -2,7 +2,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 /// 1〜4 枚の写真で Pinterest 風コラージュを描画。
-/// 写真がない場合は fallback の単色を表示する。
+/// 各セルは `BoxFit.cover` で枠を必ず埋め、画像のアスペクト比に
+/// 関わらずトリミングして表示する。写真がない場合は fallback の単色 + 任意アイコンを表示。
 class PhotoCollage extends StatelessWidget {
   const PhotoCollage({
     required this.photos,
@@ -23,12 +24,17 @@ class PhotoCollage extends StatelessWidget {
     final bg = fallbackColor ?? scheme.surfaceContainerHighest;
 
     if (photos.isEmpty) {
-      return Container(
+      return ColoredBox(
         color: bg,
-        alignment: Alignment.center,
         child: fallbackIcon != null
-            ? Icon(fallbackIcon, color: scheme.onSurfaceVariant, size: 40)
-            : null,
+            ? Center(
+                child: Icon(
+                  fallbackIcon,
+                  color: scheme.onSurfaceVariant,
+                  size: 40,
+                ),
+              )
+            : const SizedBox.expand(),
       );
     }
     if (photos.length == 1) {
@@ -37,62 +43,42 @@ class PhotoCollage extends StatelessWidget {
     if (photos.length == 2) {
       return Row(
         children: [
-          Expanded(
-            child: _Photo(url: photos[0], bg: bg),
-          ),
+          Expanded(child: _Photo(url: photos[0], bg: bg)),
           SizedBox(width: gap),
-          Expanded(
-            child: _Photo(url: photos[1], bg: bg),
-          ),
+          Expanded(child: _Photo(url: photos[1], bg: bg)),
         ],
       );
     }
     if (photos.length == 3) {
       return Row(
         children: [
-          Expanded(
-            flex: 2,
-            child: _Photo(url: photos[0], bg: bg),
-          ),
+          Expanded(flex: 2, child: _Photo(url: photos[0], bg: bg)),
           SizedBox(width: gap),
           Expanded(
             child: Column(
               children: [
-                Expanded(
-                  child: _Photo(url: photos[1], bg: bg),
-                ),
+                Expanded(child: _Photo(url: photos[1], bg: bg)),
                 SizedBox(height: gap),
-                Expanded(
-                  child: _Photo(url: photos[2], bg: bg),
-                ),
+                Expanded(child: _Photo(url: photos[2], bg: bg)),
               ],
             ),
           ),
         ],
       );
     }
-    // 4 +
+    // 4+
     return Row(
       children: [
-        Expanded(
-          flex: 2,
-          child: _Photo(url: photos[0], bg: bg),
-        ),
+        Expanded(flex: 2, child: _Photo(url: photos[0], bg: bg)),
         SizedBox(width: gap),
         Expanded(
           child: Column(
             children: [
-              Expanded(
-                child: _Photo(url: photos[1], bg: bg),
-              ),
+              Expanded(child: _Photo(url: photos[1], bg: bg)),
               SizedBox(height: gap),
-              Expanded(
-                child: _Photo(url: photos[2], bg: bg),
-              ),
+              Expanded(child: _Photo(url: photos[2], bg: bg)),
               SizedBox(height: gap),
-              Expanded(
-                child: _Photo(url: photos[3], bg: bg),
-              ),
+              Expanded(child: _Photo(url: photos[3], bg: bg)),
             ],
           ),
         ),
@@ -101,6 +87,8 @@ class PhotoCollage extends StatelessWidget {
   }
 }
 
+/// 親の制約に必ず一致するサイズで画像を center-crop 表示する。
+/// `DecorationImage` は枠より大きい画像でも小さい画像でも `BoxFit.cover` で枠を埋める。
 class _Photo extends StatelessWidget {
   const _Photo({required this.url, required this.bg});
   final String url;
@@ -108,11 +96,16 @@ class _Photo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CachedNetworkImage(
-      imageUrl: url,
-      fit: BoxFit.cover,
-      placeholder: (c, _) => Container(color: bg),
-      errorWidget: (c, _, _) => Container(color: bg),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: bg,
+        image: DecorationImage(
+          image: CachedNetworkImageProvider(url),
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+        ),
+      ),
+      child: const SizedBox.expand(),
     );
   }
 }
