@@ -2,10 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/models/spot_list.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
-import 'package:polaris/l10n/gen/app_localizations.dart';
 import 'package:polaris/shared/widgets/photo_collage.dart';
 
 class FolderDetailScreen extends ConsumerWidget {
@@ -14,7 +14,6 @@ class FolderDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l = AppLocalizations.of(context);
     final folder = ref.watch(folderByIdProvider(folderId));
     final lists = ref.watch(listsByFolderProvider(folderId));
     final spotCount = ref.watch(spotsCountByFolderProvider(folderId));
@@ -31,11 +30,12 @@ class FolderDetailScreen extends ConsumerWidget {
         : scheme.primary;
 
     return Scaffold(
+      backgroundColor: scheme.surface,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
-            expandedHeight: 260,
+            expandedHeight: 240,
             pinned: true,
             stretch: true,
             backgroundColor: scheme.surface,
@@ -64,7 +64,7 @@ class FolderDetailScreen extends ConsumerWidget {
                 accent: accent,
                 listsCount: lists.length,
                 spotsCount: spotCount,
-                l: l,
+                updatedAt: folder.updatedAt,
               ),
             ),
           ),
@@ -74,16 +74,16 @@ class FolderDetailScreen extends ConsumerWidget {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 32),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 0.82,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 18,
+                  childAspectRatio: 0.78,
+                  crossAxisSpacing: 4,
+                  mainAxisSpacing: 8,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, i) => _PinterestListCard(list: lists[i]),
+                  (context, i) => _FavoriteListCard(list: lists[i]),
                   childCount: lists.length,
                 ),
               ),
@@ -101,14 +101,14 @@ class _FolderHeader extends StatelessWidget {
     required this.accent,
     required this.listsCount,
     required this.spotsCount,
-    required this.l,
+    required this.updatedAt,
   });
   final String folderName;
   final String? coverPhotoUrl;
   final Color accent;
   final int listsCount;
   final int spotsCount;
-  final AppLocalizations l;
+  final DateTime updatedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +163,7 @@ class _FolderHeader extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '$spotsCount件のスポット ・ $listsCountリスト',
+                '$spotsCount件のスポット ・ $listsCountリスト ・ ${relativeDate(updatedAt)}',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.92),
                   fontSize: 13,
@@ -178,130 +178,81 @@ class _FolderHeader extends StatelessWidget {
   }
 }
 
-class _PinterestListCard extends ConsumerWidget {
-  const _PinterestListCard({required this.list});
+class _FavoriteListCard extends ConsumerWidget {
+  const _FavoriteListCard({required this.list});
   final SpotList list;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     final photos = ref.watch(listCoverPhotosProvider(list.id));
     final spotCount = ref.watch(spotsCountByListProvider(list.id));
     final accent = list.colorValue != null
         ? Color(list.colorValue!)
         : scheme.primary;
 
-    return GestureDetector(
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
       onTap: () => context.push('/lists/${list.id}'),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Stack(
-          fit: StackFit.expand,
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            PhotoCollage(
-              photos: photos,
-              fallbackColor: accent.withValues(alpha: 0.18),
-              fallbackIcon: _iconFor(list.iconName),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.55, 1],
-                  colors: [Color(0x00000000), Color(0xCC000000)],
+            AspectRatio(
+              aspectRatio: 1,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ColoredBox(
+                  color: scheme.surface,
+                  child: PhotoCollage(
+                    photos: photos,
+                    gap: 2,
+                    fallbackColor: accent.withValues(alpha: 0.16),
+                  ),
                 ),
               ),
             ),
-            Positioned(
-              top: 10,
-              left: 10,
-              child: _ListBadge(icon: _iconFor(list.iconName), color: accent),
-            ),
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
                     list.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
+                    style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
-                      shadows: [
-                        Shadow(blurRadius: 6, color: Color(0x66000000)),
-                      ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '$spotCount件',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
+                ),
+                InkResponse(
+                  onTap: () {},
+                  radius: 18,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'スポット：$spotCount 件',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                height: 1.4,
               ),
             ),
           ],
         ),
       ),
     );
-  }
-}
-
-class _ListBadge extends StatelessWidget {
-  const _ListBadge({required this.icon, required this.color});
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 28,
-      height: 28,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(icon, size: 15, color: color),
-    );
-  }
-}
-
-IconData _iconFor(String? name) {
-  switch (name) {
-    case 'location_city':
-      return Icons.location_city;
-    case 'temple_buddhist':
-      return Icons.temple_buddhist;
-    case 'temple_hindu':
-      return Icons.temple_hindu;
-    case 'favorite':
-      return Icons.favorite;
-    case 'local_cafe':
-      return Icons.local_cafe;
-    case 'ramen_dining':
-      return Icons.ramen_dining;
-    case 'photo_camera':
-      return Icons.photo_camera;
-    case 'restaurant':
-      return Icons.restaurant;
-    case 'hotel':
-      return Icons.hotel;
-    case 'nightlight_round':
-      return Icons.nightlight_round;
-    case 'coffee':
-      return Icons.coffee;
-    default:
-      return Icons.list_alt_rounded;
   }
 }

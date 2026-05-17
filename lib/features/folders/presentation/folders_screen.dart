@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/models/folder.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
@@ -16,110 +17,86 @@ class FoldersScreen extends ConsumerWidget {
     final folders = ref.watch(foldersProvider);
 
     return Scaffold(
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          SliverAppBar.large(
-            title: Text(l.foldersTitle),
-            pinned: true,
-            actions: [
-              IconButton(
-                tooltip: l.searchTitle,
-                onPressed: () => context.push('/search'),
-                icon: const Icon(Icons.search_rounded),
-              ),
-              IconButton(
-                tooltip: l.foldersNew,
-                onPressed: () {},
-                icon: const Icon(Icons.add_rounded),
-              ),
-              const SizedBox(width: 4),
-            ],
-          ),
-          if (folders.isEmpty)
-            SliverFillRemaining(child: _Empty(l: l))
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.78,
-                  crossAxisSpacing: 14,
-                  mainAxisSpacing: 18,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => _PinterestFolderCard(folder: folders[i]),
-                  childCount: folders.length,
-                ),
-              ),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            const _UserHeader(),
+            SliverPersistentHeader(
+              pinned: true,
+              delegate: _SearchHeaderDelegate(l: l),
             ),
-        ],
+            if (folders.isEmpty)
+              SliverFillRemaining(child: _Empty(l: l))
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 32),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio: 0.74,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 8,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, i) => _FavoriteFolderCard(folder: folders[i]),
+                    childCount: folders.length,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _PinterestFolderCard extends ConsumerWidget {
-  const _PinterestFolderCard({required this.folder});
-  final Folder folder;
+class _UserHeader extends StatelessWidget {
+  const _UserHeader();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final photos = ref.watch(folderCoverPhotosProvider(folder.id));
-    final spotCount = ref.watch(spotsCountByFolderProvider(folder.id));
-    final lists = ref.watch(listsByFolderProvider(folder.id));
-    final accent = folder.colorValue != null
-        ? Color(folder.colorValue!)
-        : scheme.primary;
-
-    return GestureDetector(
-      onTap: () => context.push('/folders/${folder.id}'),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: Stack(
-          fit: StackFit.expand,
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        child: Row(
           children: [
-            PhotoCollage(
-              photos: photos,
-              fallbackColor: accent.withValues(alpha: 0.18),
-              fallbackIcon: _iconFor(folder.iconName),
-            ),
-            // 上から下への暗いグラデーション (テキストの可読性確保)
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0, 0.55, 1],
-                  colors: [
-                    Color(0x00000000),
-                    Color(0x33000000),
-                    Color(0xCC000000),
-                  ],
-                ),
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: scheme.primaryContainer,
+              child: Icon(
+                Icons.person_rounded,
+                color: scheme.onPrimaryContainer,
+                size: 22,
               ),
             ),
-            // メタ情報のチップ (右上)
-            Positioned(
-              top: 10,
-              left: 10,
-              child: _FolderBadge(
-                icon: _iconFor(folder.iconName),
-                color: accent,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ゲスト',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'あなたのスポット',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
-            // タイトル + サブテキスト
-            Positioned(
-              left: 14,
-              right: 14,
-              bottom: 14,
-              child: _FolderCaption(
-                name: folder.name,
-                lists: lists.length,
-                spots: spotCount,
-              ),
+            IconButton(
+              onPressed: () => context.push('/settings'),
+              icon: const Icon(Icons.menu_rounded),
+              color: scheme.onSurfaceVariant,
             ),
           ],
         ),
@@ -128,104 +105,164 @@ class _PinterestFolderCard extends ConsumerWidget {
   }
 }
 
-class _FolderBadge extends StatelessWidget {
-  const _FolderBadge({required this.icon, required this.color});
-  final IconData icon;
-  final Color color;
+class _SearchHeaderDelegate extends SliverPersistentHeaderDelegate {
+  _SearchHeaderDelegate({required this.l});
+  final AppLocalizations l;
 
   @override
-  Widget build(BuildContext context) {
+  double get minExtent => 64;
+  @override
+  double get maxExtent => 64;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+      color: scheme.surface,
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Material(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(28),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(28),
+                onTap: () => context.push('/search'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.search_rounded,
+                        color: scheme.onSurfaceVariant,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '自分のスポットを検索',
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: l.foldersNew,
+            onPressed: () => _showCreateFolderDialog(context),
+            icon: const Icon(Icons.add_rounded),
+            iconSize: 26,
+            color: scheme.onSurface,
           ),
         ],
       ),
-      child: Icon(icon, size: 18, color: color),
     );
   }
-}
-
-class _FolderCaption extends StatelessWidget {
-  const _FolderCaption({
-    required this.name,
-    required this.lists,
-    required this.spots,
-  });
-  final String name;
-  final int lists;
-  final int spots;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-            height: 1.15,
-            letterSpacing: -0.2,
-            shadows: [
-              Shadow(blurRadius: 8, color: Color(0x66000000)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$spots件 ・ $listsリスト',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.88),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.1,
-          ),
-        ),
-      ],
-    );
-  }
+  bool shouldRebuild(covariant _SearchHeaderDelegate oldDelegate) => false;
 }
 
-IconData _iconFor(String? name) {
-  switch (name) {
-    case 'location_city':
-      return Icons.location_city;
-    case 'temple_buddhist':
-      return Icons.temple_buddhist;
-    case 'temple_hindu':
-      return Icons.temple_hindu;
-    case 'favorite':
-      return Icons.favorite;
-    case 'local_cafe':
-      return Icons.local_cafe;
-    case 'ramen_dining':
-      return Icons.ramen_dining;
-    case 'photo_camera':
-      return Icons.photo_camera;
-    case 'restaurant':
-      return Icons.restaurant;
-    case 'hotel':
-      return Icons.hotel;
-    case 'nightlight_round':
-      return Icons.nightlight_round;
-    case 'coffee':
-      return Icons.coffee;
-    default:
-      return Icons.folder_rounded;
+class _FavoriteFolderCard extends ConsumerWidget {
+  const _FavoriteFolderCard({required this.folder});
+  final Folder folder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final photos = ref.watch(folderCoverPhotosProvider(folder.id));
+    final spotCount = ref.watch(spotsCountByFolderProvider(folder.id));
+    final accent = folder.colorValue != null
+        ? Color(folder.colorValue!)
+        : scheme.primary;
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => context.push('/folders/${folder.id}'),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ColoredBox(
+                  color: scheme.surface,
+                  child: PhotoCollage(
+                    photos: photos,
+                    gap: 2,
+                    fallbackColor: accent.withValues(alpha: 0.16),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    folder.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                InkResponse(
+                  onTap: () => _showDeleteFolderDialog(context, folder.name),
+                  radius: 18,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text.rich(
+              TextSpan(
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                  height: 1.4,
+                ),
+                children: [
+                  TextSpan(text: 'スポット：$spotCount 件'),
+                  const TextSpan(text: '  '),
+                  TextSpan(
+                    text: relativeDate(folder.updatedAt),
+                    style: TextStyle(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -268,4 +305,88 @@ class _Empty extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _showCreateFolderDialog(BuildContext context) async {
+  final l = AppLocalizations.of(context);
+  final controller = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('フォルダを作成'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: controller,
+              maxLength: 25,
+              decoration: const InputDecoration(
+                hintText: 'フォルダ名を入力',
+              ),
+              autofocus: true,
+            ),
+            Text(
+              '25文字まで入力可能です',
+              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l.filterCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('作成'),
+          ),
+        ],
+      );
+    },
+  );
+  controller.dispose();
+}
+
+Future<void> _showDeleteFolderDialog(
+  BuildContext context,
+  String folderName,
+) async {
+  final l = AppLocalizations.of(context);
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        title: const Text('フォルダを削除'),
+        content: Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(text: 'フォルダ「'),
+              TextSpan(
+                text: folderName,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const TextSpan(text: '」を削除してもよろしいですか？'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l.filterCancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('削除'),
+          ),
+        ],
+      );
+    },
+  );
 }

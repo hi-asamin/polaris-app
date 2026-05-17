@@ -40,7 +40,7 @@ final folderCoverPhotosProvider = Provider.family<List<String>, String>((
     if (s.photoUrls.isEmpty) continue;
     final url = s.photoUrls.first;
     if (seen.add(url)) photos.add(url);
-    if (photos.length >= 4) break;
+    if (photos.length >= 3) break;
   }
   return photos;
 });

@@ -6,7 +6,7 @@ import 'package:polaris/features/visits/models/visit.dart';
 class MockData {
   MockData._();
 
-  static const List<Folder> folders = [
+  static final List<Folder> folders = [
     Folder(
       id: 'folder-tokyo',
       name: '東京',
@@ -14,6 +14,7 @@ class MockData {
       colorValue: 0xFF1976D2,
       coverPhotoUrl: 'https://picsum.photos/seed/tokyo/600/400',
       orderIndex: 0,
+      updatedAt: DateTime(2026, 5, 15, 18, 30),
     ),
     Folder(
       id: 'folder-kyoto',
@@ -22,6 +23,7 @@ class MockData {
       colorValue: 0xFFD32F2F,
       coverPhotoUrl: 'https://picsum.photos/seed/kyoto/600/400',
       orderIndex: 1,
+      updatedAt: DateTime(2026, 5, 8, 9, 15),
     ),
     Folder(
       id: 'folder-date',
@@ -30,6 +32,7 @@ class MockData {
       colorValue: 0xFFE91E63,
       coverPhotoUrl: 'https://picsum.photos/seed/date/600/400',
       orderIndex: 2,
+      updatedAt: DateTime(2026, 4, 22, 22, 0),
     ),
   ];
 
