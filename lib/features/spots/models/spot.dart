@@ -33,6 +33,7 @@ abstract class Spot with _$Spot {
     String? userMemo,
     String? editorialSummary,
     String? googleMapsUri,
+    DateTime? createdAt,
     @Default(false) bool wantToVisit,
   }) = _Spot;
 }

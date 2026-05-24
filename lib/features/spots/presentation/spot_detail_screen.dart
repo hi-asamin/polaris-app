@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -66,9 +67,12 @@ class SpotDetailScreen extends ConsumerWidget {
                 child: IconButton(
                   style: glassStyle,
                   tooltip: l.spotDetailWantToVisit,
-                  onPressed: () => ref
-                      .read(spotsNotifierProvider.notifier)
-                      .toggleWantToVisit(spot.id),
+                  onPressed: () {
+                    HapticFeedback.mediumImpact();
+                    ref
+                        .read(spotsNotifierProvider.notifier)
+                        .toggleWantToVisit(spot.id);
+                  },
                   icon: Icon(
                     spot.wantToVisit
                         ? Icons.favorite_rounded
@@ -242,47 +246,18 @@ class SpotDetailScreen extends ConsumerWidget {
                       ],
                     ),
                   ],
+                  if (spot.createdAt != null) ...[
+                    const SizedBox(height: 10),
+                    _SavedTimeHint(savedAt: spot.createdAt!),
+                  ],
                   if (spot.editorialSummary != null) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.auto_awesome,
-                                size: 14,
-                                color: scheme.primary,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Google による説明',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            spot.editorialSummary!,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 20),
+                    _MagazineEditorialBlock(
+                      summary: spot.editorialSummary!,
+                      accent: spot.primaryCategory.color,
                     ),
                   ],
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   if (spot.address != null)
                     _InfoRow(
                       icon: Icons.location_on_outlined,
@@ -732,6 +707,8 @@ class _EditMemoDialogState extends ConsumerState<_EditMemoDialog> {
         .read(spotsNotifierProvider.notifier)
         .updateMemo(widget.spotId, value.isEmpty ? null : value);
     if (!mounted) return;
+    await HapticFeedback.mediumImpact();
+    if (!mounted) return;
     Navigator.pop(context);
   }
 
@@ -909,6 +886,8 @@ class _SaveToListSheetState extends ConsumerState<_SaveToListSheet> {
       await notifier.remove(widget.spotId, listId);
     }
     if (!mounted) return;
+    await HapticFeedback.mediumImpact();
+    if (!mounted) return;
     Navigator.pop(context);
   }
 }
@@ -973,6 +952,8 @@ class _AddVisitSheetState extends ConsumerState<_AddVisitSheet> {
       costJpy: cost,
     );
     await ref.read(visitsNotifierProvider.notifier).create(visit);
+    if (!mounted) return;
+    await HapticFeedback.heavyImpact();
     if (!mounted) return;
     Navigator.pop(context);
   }
@@ -1110,6 +1091,141 @@ class _AddVisitSheetState extends ConsumerState<_AddVisitSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SavedTimeHint extends StatelessWidget {
+  const _SavedTimeHint({required this.savedAt});
+  final DateTime savedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final days = DateTime.now().difference(savedAt).inDays;
+
+    // 30 日以上経つと「忘れかけている」サイン色に。
+    final isStale = days >= 30;
+    final color = isStale ? const Color(0xFFD97706) : scheme.onSurfaceVariant;
+
+    String label;
+    if (days < 1) {
+      label = '今日保存';
+    } else if (days < 7) {
+      label = '保存して $days 日';
+    } else if (days < 30) {
+      final weeks = (days / 7).floor();
+      label = '保存して $weeks 週間';
+    } else if (days < 365) {
+      final months = (days / 30).floor();
+      label = '保存して $months ヶ月 ・ まだ訪れていない';
+    } else {
+      final years = (days / 365).floor();
+      label = '保存して $years 年 ・ まだ訪れていない';
+    }
+
+    return Row(
+      children: [
+        Icon(
+          isStale ? Icons.access_time_filled_rounded : Icons.schedule_rounded,
+          size: 14,
+          color: color,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: color,
+            fontWeight: isStale ? FontWeight.w600 : FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Editorial summary を「雑誌見出し」風に表現する。
+/// 大きな引用記号 + 控えめなラベル + やや大きめ italic 風の本文。
+class _MagazineEditorialBlock extends StatelessWidget {
+  const _MagazineEditorialBlock({
+    required this.summary,
+    required this.accent,
+  });
+  final String summary;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: scheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 2,
+                color: accent,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'EDITORIAL',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // 大きな開きクオート
+          Text(
+            '“',
+            style: TextStyle(
+              fontSize: 56,
+              height: 0.7,
+              color: accent.withValues(alpha: 0.35),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            summary,
+            style: theme.textTheme.titleMedium?.copyWith(
+              height: 1.6,
+              fontWeight: FontWeight.w500,
+              fontStyle: FontStyle.italic,
+              color: scheme.onSurface.withValues(alpha: 0.88),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '— via Google',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

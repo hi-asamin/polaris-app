@@ -175,6 +175,7 @@ class SpotsRepository {
       userMemo: r.userMemo,
       editorialSummary: r.editorialSummary,
       googleMapsUri: r.googleMapsUri,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(r.createdAt),
       wantToVisit: r.wantToVisit,
     );
   }
