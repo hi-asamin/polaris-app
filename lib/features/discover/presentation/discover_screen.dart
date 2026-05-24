@@ -13,70 +13,101 @@ class DiscoverScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final topInset = MediaQuery.viewPaddingOf(context).top;
 
     return Scaffold(
       backgroundColor: scheme.surface,
-      body: SafeArea(
-        bottom: false,
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            SliverToBoxAdapter(
-              child: _SearchBarHeader(
-                hint: l.mapSearchHint,
-                onTap: () => context.push('/search'),
+      // Stack で本体スクロールの上に検索バーを浮かせる。
+      // SafeArea は外し、ヒーローはステータスバー領域まで延ばす。
+      body: Stack(
+        children: [
+          CustomScrollView(
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              const SliverToBoxAdapter(child: _HeroCarousel()),
+              for (final section in CurationMock.sections)
+                SliverToBoxAdapter(
+                  child: _ThemeSection(section: section),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          ),
+          // 検索バー (常に最前面)。ステータスバーは写真の上にあるため、
+          // 視認性確保のため上部にだけ薄い暗グラデを敷く。
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: topInset + 8,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x66000000), Color(0x00000000)],
+                  ),
+                ),
               ),
             ),
-            const SliverToBoxAdapter(child: _HeroCarousel()),
-            for (final section in CurationMock.sections)
-              SliverToBoxAdapter(
-                child: _ThemeSection(section: section),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                child: _FloatingSearchBar(
+                  hint: l.mapSearchHint,
+                  onTap: () => context.push('/search'),
+                ),
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _SearchBarHeader extends StatelessWidget {
-  const _SearchBarHeader({required this.hint, required this.onTap});
+class _FloatingSearchBar extends StatelessWidget {
+  const _FloatingSearchBar({required this.hint, required this.onTap});
   final String hint;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Material(
-        color: scheme.surfaceContainerHigh,
+    return Material(
+      color: scheme.surface.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(28),
+      elevation: 2,
+      shadowColor: Colors.black.withValues(alpha: 0.18),
+      child: InkWell(
         borderRadius: BorderRadius.circular(28),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(28),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.search_rounded,
-                  color: scheme.onSurfaceVariant,
-                  size: 20,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    hint,
-                    style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 14,
-                    ),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                color: scheme.onSurfaceVariant,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  hint,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 14,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -120,8 +151,14 @@ class _HeroCarouselState extends State<_HeroCarousel> {
   @override
   Widget build(BuildContext context) {
     const heroes = CurationMock.heroes;
-    return AspectRatio(
-      aspectRatio: 1,
+    final topInset = MediaQuery.viewPaddingOf(context).top;
+    // ヒーローの高さ: status bar 領域 + 1:1 の正方形。
+    final width = MediaQuery.sizeOf(context).width;
+    final height = width + topInset;
+
+    return SizedBox(
+      height: height,
+      width: width,
       child: Stack(
         children: [
           PageView.builder(
@@ -270,7 +307,6 @@ class _ThemeSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            // 横並び 4 列の写真ストリップ。先頭と末尾だけ外側角丸。
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Row(
