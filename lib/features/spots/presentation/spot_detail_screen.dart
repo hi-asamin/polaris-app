@@ -33,47 +33,75 @@ class SpotDetailScreen extends ConsumerWidget {
       );
     }
 
+    final heroHeight = MediaQuery.sizeOf(context).height * 0.55;
+    final glassStyle = IconButton.styleFrom(
+      backgroundColor: Colors.black.withValues(alpha: 0.32),
+      foregroundColor: Colors.white,
+    );
+
     return Scaffold(
+      backgroundColor: scheme.surface,
+      bottomNavigationBar: _BottomActionBar(spotId: spot.id),
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: heroHeight,
             pinned: true,
-            backgroundColor: scheme.surface,
-            foregroundColor: scheme.onSurface,
             stretch: true,
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            iconTheme: const IconThemeData(color: Colors.white),
+            leading: Padding(
+              padding: const EdgeInsets.all(8),
+              child: IconButton(
+                style: glassStyle,
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              ),
+            ),
             actions: [
-              IconButton(
-                tooltip: l.spotDetailWantToVisit,
-                onPressed: () => ref
-                    .read(spotsNotifierProvider.notifier)
-                    .toggleWantToVisit(spot.id),
-                icon: Icon(
-                  spot.wantToVisit
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  color: spot.wantToVisit ? scheme.error : null,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: IconButton(
+                  style: glassStyle,
+                  tooltip: l.spotDetailWantToVisit,
+                  onPressed: () => ref
+                      .read(spotsNotifierProvider.notifier)
+                      .toggleWantToVisit(spot.id),
+                  icon: Icon(
+                    spot.wantToVisit
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: spot.wantToVisit
+                        ? const Color(0xFFFF5C7A)
+                        : Colors.white,
+                  ),
                 ),
               ),
-              IconButton(
-                tooltip: 'リストに保存',
-                onPressed: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  showDragHandle: true,
-                  builder: (_) => _SaveToListSheet(spotId: spot.id),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: IconButton(
+                  style: glassStyle,
+                  tooltip: 'シェア',
+                  onPressed: () => context.push('/share/spot/${spot.id}'),
+                  icon: const Icon(Icons.ios_share_rounded),
                 ),
-                icon: const Icon(Icons.bookmark_add_outlined),
               ),
-              _RefreshFromPlacesButton(spotId: spot.id),
-              IconButton(
-                tooltip: 'シェア',
-                onPressed: () => context.push('/share/spot/${spot.id}'),
-                icon: const Icon(Icons.ios_share_rounded),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+                child: _RefreshFromPlacesButton(
+                  spotId: spot.id,
+                  style: glassStyle,
+                ),
               ),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: _PhotoCarousel(spot: spot),
+              stretchModes: const [
+                StretchMode.zoomBackground,
+                StretchMode.blurBackground,
+              ],
             ),
           ),
           SliverToBoxAdapter(
@@ -180,12 +208,14 @@ class SpotDetailScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   Text(
                     spot.name,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                      height: 1.1,
                     ),
                   ),
                   if (spot.rating != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         const Icon(
@@ -196,8 +226,8 @@ class SpotDetailScreen extends ConsumerWidget {
                         const SizedBox(width: 4),
                         Text(
                           spot.rating!.toStringAsFixed(1),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         if (spot.ratingCount != null) ...[
@@ -279,27 +309,6 @@ class SpotDetailScreen extends ConsumerWidget {
                       label: l.spotDetailWebsiteLabel,
                       value: spot.websiteUrl!,
                     ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          icon: const Icon(Icons.add_circle_outline),
-                          label: Text(l.spotDetailAddVisit),
-                          onPressed: () => _showAddVisitSheet(
-                            context,
-                            spotId: spot.id,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.map_outlined),
-                        label: Text(l.spotDetailOpenInMaps),
-                        onPressed: () {},
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 24),
                   Row(
                     children: [
@@ -421,43 +430,107 @@ class SpotDetailScreen extends ConsumerWidget {
   }
 }
 
-class _PhotoCarousel extends StatelessWidget {
+class _PhotoCarousel extends StatefulWidget {
   const _PhotoCarousel({required this.spot});
   final Spot spot;
 
   @override
+  State<_PhotoCarousel> createState() => _PhotoCarouselState();
+}
+
+class _PhotoCarouselState extends State<_PhotoCarousel> {
+  final _controller = PageController();
+  int _current = 0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    if (spot.photoUrls.isEmpty) {
+    final photos = widget.spot.photoUrls;
+    if (photos.isEmpty) {
       return Container(
-        color: spot.primaryCategory.color.withValues(alpha: 0.2),
+        color: widget.spot.primaryCategory.color.withValues(alpha: 0.2),
         child: Center(
           child: Icon(
-            spot.primaryCategory.icon,
+            widget.spot.primaryCategory.icon,
             size: 80,
-            color: spot.primaryCategory.color,
+            color: widget.spot.primaryCategory.color,
           ),
         ),
       );
     }
-    return PageView.builder(
-      itemCount: spot.photoUrls.length,
-      itemBuilder: (context, i) {
-        return CachedNetworkImage(
-          imageUrl: spot.photoUrls[i],
-          fit: BoxFit.cover,
-          placeholder: (c, _) =>
-              Container(color: scheme.surfaceContainerHighest),
-          errorWidget: (c, _, __) => Container(
-            color: spot.primaryCategory.color.withValues(alpha: 0.2),
-            child: Icon(
-              spot.primaryCategory.icon,
-              size: 80,
-              color: spot.primaryCategory.color,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: photos.length,
+          onPageChanged: (i) => setState(() => _current = i),
+          itemBuilder: (context, i) {
+            return CachedNetworkImage(
+              imageUrl: photos[i],
+              fit: BoxFit.cover,
+              placeholder: (c, _) =>
+                  Container(color: scheme.surfaceContainerHighest),
+              errorWidget: (c, _, _) => Container(
+                color: widget.spot.primaryCategory.color.withValues(
+                  alpha: 0.2,
+                ),
+                child: Icon(
+                  widget.spot.primaryCategory.icon,
+                  size: 80,
+                  color: widget.spot.primaryCategory.color,
+                ),
+              ),
+            );
+          },
+        ),
+        // 下端のグラデーション (タイトル無くてもページ表現の足元を締める)
+        const Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 80,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Color(0x55000000)],
+              ),
             ),
           ),
-        );
-      },
+        ),
+        if (photos.length > 1)
+          Positioned(
+            bottom: 16,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < photos.length; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _current ? 22 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: i == _current
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -520,8 +593,9 @@ Future<void> _showAddVisitSheet(
 }
 
 class _RefreshFromPlacesButton extends ConsumerStatefulWidget {
-  const _RefreshFromPlacesButton({required this.spotId});
+  const _RefreshFromPlacesButton({required this.spotId, this.style});
   final String spotId;
+  final ButtonStyle? style;
 
   @override
   ConsumerState<_RefreshFromPlacesButton> createState() =>
@@ -556,15 +630,77 @@ class _RefreshFromPlacesButtonState
   @override
   Widget build(BuildContext context) {
     return IconButton(
+      style: widget.style,
       tooltip: 'Google から更新',
       onPressed: _loading ? null : _refresh,
       icon: _loading
           ? const SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
             )
           : const Icon(Icons.cloud_sync_outlined),
+    );
+  }
+}
+
+class _BottomActionBar extends ConsumerWidget {
+  const _BottomActionBar({required this.spotId});
+  final String spotId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.4),
+          ),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: () => _showAddVisitSheet(context, spotId: spotId),
+                  icon: const Icon(Icons.check_circle_outline_rounded),
+                  label: const Text('訪問を記録'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 56,
+                height: 50,
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    side: BorderSide(color: scheme.outlineVariant),
+                  ),
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => _SaveToListSheet(spotId: spotId),
+                  ),
+                  child: const Icon(Icons.bookmark_add_outlined),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
