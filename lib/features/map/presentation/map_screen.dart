@@ -1,8 +1,14 @@
+import 'dart:ui' as ui;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:google_maps_cluster_manager_2/google_maps_cluster_manager_2.dart';
+// google_maps_flutter にも Cluster / ClusterManager 型が存在するが、本ファイル
+// では cluster_manager_2 側の同名型を使うため、google_maps_flutter 側は hide。
+import 'package:google_maps_flutter/google_maps_flutter.dart'
+    hide Cluster, ClusterManager;
 import 'package:polaris/core/location/location_service.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 import 'package:polaris/features/spots/models/spot_category_x.dart';
@@ -25,11 +31,129 @@ class MapScreen extends ConsumerStatefulWidget {
 class _MapScreenState extends ConsumerState<MapScreen> {
   String? _selectedSpotId;
   GoogleMapController? _mapController;
+  ClusterManager<_SpotItem>? _clusterManager;
+  Set<Marker> _markers = {};
+  List<_SpotItem> _items = const [];
 
   @override
   void dispose() {
     _mapController?.dispose();
     super.dispose();
+  }
+
+  ClusterManager<_SpotItem> _createClusterManager() {
+    return ClusterManager<_SpotItem>(
+      _items,
+      _onClustersUpdated,
+      markerBuilder: _buildClusterMarker,
+      // zoom レベルとクラスタ閾値の段階。stopClusteringZoom 以上では
+      // 個別マーカー表示に倒す。
+      stopClusteringZoom: 17,
+    );
+  }
+
+  void _onClustersUpdated(Set<Marker> markers) {
+    if (!mounted) return;
+    setState(() => _markers = markers);
+  }
+
+  void _syncItems(List<Spot> spots) {
+    _items = spots.map(_SpotItem.new).toList();
+    final manager = _clusterManager;
+    if (manager == null) return;
+    manager.setItems(_items);
+  }
+
+  Future<Marker> _buildClusterMarker(Cluster<_SpotItem> cluster) async {
+    if (!cluster.isMultiple) {
+      final s = cluster.items.first.spot;
+      return Marker(
+        markerId: MarkerId(s.id),
+        position: LatLng(s.lat, s.lng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(_hueFor(s.primaryCategory)),
+        infoWindow: InfoWindow(
+          title: s.name,
+          snippet: s.address,
+          onTap: () => context.push('/spots/${s.id}'),
+        ),
+        onTap: () => setState(() => _selectedSpotId = s.id),
+      );
+    }
+    final icon = await _buildClusterBitmap(cluster.count);
+    return Marker(
+      markerId: MarkerId(cluster.getId()),
+      position: cluster.location,
+      icon: icon,
+      onTap: () => _zoomToCluster(cluster),
+    );
+  }
+
+  Future<void> _zoomToCluster(Cluster<_SpotItem> cluster) async {
+    final controller = _mapController;
+    if (controller == null) return;
+    final currentZoom = await controller.getZoomLevel();
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(
+        cluster.location,
+        (currentZoom + 2).clamp(3.0, 20.0),
+      ),
+    );
+  }
+
+  Future<BitmapDescriptor> _buildClusterBitmap(int count) async {
+    final scheme = Theme.of(context).colorScheme;
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    const logicalSize = 56.0;
+    final size = (logicalSize * ratio).round();
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final center = Offset(size / 2, size / 2);
+
+    canvas.drawCircle(
+      center,
+      size / 2,
+      Paint()..color = scheme.primary.withValues(alpha: 0.25),
+    );
+    canvas.drawCircle(
+      center,
+      size / 2.4,
+      Paint()..color = scheme.primary,
+    );
+    canvas.drawCircle(
+      center,
+      size / 2.4,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (2.5 * ratio),
+    );
+
+    final painter = TextPainter(textDirection: TextDirection.ltr)
+      ..text = TextSpan(
+        text: count > 99 ? '99+' : count.toString(),
+        style: TextStyle(
+          fontSize: 16 * ratio,
+          color: scheme.onPrimary,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.2,
+        ),
+      )
+      ..layout();
+    painter.paint(
+      canvas,
+      Offset(
+        center.dx - painter.width / 2,
+        center.dy - painter.height / 2,
+      ),
+    );
+
+    final image = await recorder.endRecording().toImage(size, size);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.bytes(
+      data!.buffer.asUint8List(),
+      imagePixelRatio: ratio,
+    );
   }
 
   Future<void> _centerOnSpot(Spot spot) async {
@@ -57,27 +181,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Set<Marker> _buildMarkers(List<Spot> spots) {
-    return {
-      for (final s in spots)
-        Marker(
-          markerId: MarkerId(s.id),
-          position: LatLng(s.lat, s.lng),
-          icon: BitmapDescriptor.defaultMarkerWithHue(
-            _hueFor(s.primaryCategory),
-          ),
-          infoWindow: InfoWindow(
-            title: s.name,
-            snippet: s.address,
-            onTap: () => context.push('/spots/${s.id}'),
-          ),
-          onTap: () {
-            setState(() => _selectedSpotId = s.id);
-          },
-        ),
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -85,14 +188,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final filter = ref.watch(spotFilterProvider);
     final scheme = Theme.of(context).colorScheme;
 
+    // filtered スポットの変化に追従して cluster manager にも反映する。
+    ref.listen<List<Spot>>(filteredSpotsProvider, (_, next) {
+      _syncItems(next);
+    });
+
+    // 初回フレームで cluster manager を生成 (build 中なので Theme が取れる)。
+    _clusterManager ??= () {
+      _items = spots.map(_SpotItem.new).toList();
+      return _createClusterManager();
+    }();
+
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
             child: GoogleMap(
               initialCameraPosition: _initialCamera,
-              onMapCreated: (c) => _mapController = c,
-              markers: _buildMarkers(spots),
+              onMapCreated: (c) {
+                _mapController = c;
+                _clusterManager!.setMapId(c.mapId);
+              },
+              onCameraMove: (pos) => _clusterManager!.onCameraMove(pos),
+              onCameraIdle: () => _clusterManager!.updateMap(),
+              markers: _markers,
               myLocationEnabled: true,
               myLocationButtonEnabled: false,
               zoomControlsEnabled: false,
@@ -178,6 +297,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
     );
   }
+}
+
+/// ClusterManager 用のラッパ。Spot 自身を mixin で汚染しないため。
+class _SpotItem with ClusterItem {
+  _SpotItem(this.spot);
+  final Spot spot;
+
+  @override
+  LatLng get location => LatLng(spot.lat, spot.lng);
 }
 
 double _hueFor(SpotCategory c) {
