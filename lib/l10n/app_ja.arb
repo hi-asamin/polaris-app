@@ -5,8 +5,13 @@
   "tabMap": "マップ",
   "tabLists": "リスト",
   "tabVisits": "訪問履歴",
+  "tabSearch": "検索",
   "tabAccount": "アカウント",
   "tabSettings": "設定",
+
+  "discoverTitle": "見つける",
+  "discoverHeroSpring": "春の桜スポット",
+  "discoverHeroSpringSub": "今が見頃",
 
   "accountTitle": "アカウント",
   "accountGuestName": "ゲスト",

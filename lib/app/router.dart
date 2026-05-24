@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:polaris/features/account/presentation/account_screen.dart';
+import 'package:polaris/features/discover/presentation/discover_screen.dart';
 import 'package:polaris/features/folders/presentation/folder_detail_screen.dart';
 import 'package:polaris/features/folders/presentation/folders_screen.dart';
 import 'package:polaris/features/home/presentation/home_shell.dart';
@@ -18,6 +19,7 @@ final _rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
 final _mapNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'map');
 final _listsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'lists');
 final _visitsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'visits');
+final _discoverNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'discover');
 final _accountNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'account');
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -65,6 +67,16 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/visits',
                 name: 'visits',
                 builder: (context, state) => const VisitsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            navigatorKey: _discoverNavigatorKey,
+            routes: [
+              GoRoute(
+                path: '/discover',
+                name: 'discover',
+                builder: (context, state) => const DiscoverScreen(),
               ),
             ],
           ),

@@ -35,6 +35,11 @@ class HomeShell extends StatelessWidget {
             label: l.tabVisits,
           ),
           NavigationDestination(
+            icon: const Icon(Icons.search_outlined),
+            selectedIcon: const Icon(Icons.search_rounded),
+            label: l.tabSearch,
+          ),
+          NavigationDestination(
             icon: const Icon(Icons.person_outline_rounded),
             selectedIcon: const Icon(Icons.person_rounded),
             label: l.tabAccount,
