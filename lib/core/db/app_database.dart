@@ -9,7 +9,7 @@ import 'package:polaris/core/db/tables.dart';
 part 'app_database.g.dart';
 
 @DriftDatabase(
-  tables: [Folders, Lists, Spots, SpotLists, Visits],
+  tables: [Folders, Lists, Spots, SpotLists, Visits, UserProfiles],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -17,7 +17,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -28,6 +28,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         await m.addColumn(spots, spots.editorialSummary);
         await m.addColumn(spots, spots.googleMapsUri);
+      }
+      if (from < 3) {
+        await m.createTable(userProfiles);
       }
     },
     beforeOpen: (details) async {

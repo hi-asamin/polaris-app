@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/features/account/models/user_profile.dart';
+import 'package:polaris/features/account/presentation/user_profile_provider.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/models/spot.dart';
@@ -13,6 +15,20 @@ import 'package:polaris/shared/widgets/photo_collage.dart' show PhotoCollage;
 class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
+  Future<void> _openEditSheet(
+    BuildContext context,
+    WidgetRef ref,
+    UserProfile? current,
+  ) async {
+    if (current == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetCtx) => _EditProfileSheet(initial: current),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
@@ -22,6 +38,7 @@ class AccountScreen extends ConsumerWidget {
     final folders = ref.watch(foldersProvider);
     final lists = ref.watch(listsProvider);
     final visits = ref.watch(allVisitsProvider);
+    final profile = ref.watch(userProfileProvider).value;
     final visitedSpotIds = visits.map((v) => v.spotId).toSet();
     final gridSpots = [
       ...spots.where((s) => visitedSpotIds.contains(s.id)),
@@ -59,10 +76,12 @@ class AccountScreen extends ConsumerWidget {
             ),
             SliverToBoxAdapter(
               child: _ProfileHeader(
+                profile: profile,
                 visitsCount: visits.length,
                 foldersCount: folders.length,
                 listsCount: lists.length,
                 l: l,
+                onEdit: () => _openEditSheet(context, ref, profile),
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 4)),
@@ -99,15 +118,30 @@ class AccountScreen extends ConsumerWidget {
 
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
+    required this.profile,
     required this.visitsCount,
     required this.foldersCount,
     required this.listsCount,
     required this.l,
+    required this.onEdit,
   });
+  final UserProfile? profile;
   final int visitsCount;
   final int foldersCount;
   final int listsCount;
   final AppLocalizations l;
+  final VoidCallback onEdit;
+
+  String get _initial {
+    final name = profile?.displayName.trim() ?? '';
+    if (name.isEmpty) return '?';
+    return name.characters.first.toUpperCase();
+  }
+
+  Color get _avatarColor {
+    final v = profile?.avatarColorValue;
+    return v == null ? const Color(0xFF3F51B5) : Color(v);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,13 +155,28 @@ class _ProfileHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 38,
-                backgroundColor: scheme.primaryContainer,
-                child: Icon(
-                  Icons.person_rounded,
-                  size: 40,
-                  color: scheme.onPrimaryContainer,
+              Container(
+                width: 76,
+                height: 76,
+                decoration: BoxDecoration(
+                  color: _avatarColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: _avatarColor.withValues(alpha: 0.35),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  _initial,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               const SizedBox(width: 20),
@@ -151,7 +200,7 @@ class _ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            l.accountGuestName,
+            profile?.displayName ?? l.accountGuestName,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
@@ -175,7 +224,7 @@ class _ProfileHeader extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  onPressed: () {},
+                  onPressed: onEdit,
                   child: Text(l.accountEditProfile),
                 ),
               ),
@@ -358,6 +407,181 @@ class _Empty extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// アカウント画面から呼び出すプロフィール編集シート (名前 + 色)。
+/// サンプルセットの再投入はここでは行わない。
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  const _EditProfileSheet({required this.initial});
+  final UserProfile initial;
+
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late final TextEditingController _name;
+  late int _colorValue;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController(text: widget.initial.displayName);
+    _colorValue = widget.initial.avatarColorValue;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  String get _initial {
+    final t = _name.text.trim();
+    if (t.isEmpty) return '?';
+    return t.characters.first.toUpperCase();
+  }
+
+  Future<void> _save() async {
+    if (_name.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('名前を入力してください')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    final updated = widget.initial.copyWith(
+      displayName: _name.text.trim(),
+      avatarColorValue: _colorValue,
+    );
+    await ref.read(userProfileProvider.notifier).save(updated);
+    if (!mounted) return;
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          4,
+          24,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: ListenableBuilder(
+          listenable: _name,
+          builder: (context, _) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'プロフィールを編集',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Center(
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Color(_colorValue),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              Color(_colorValue).withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _initial,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 36,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  children: [
+                    for (final c in AvatarColor.values)
+                      GestureDetector(
+                        onTap: () => setState(() => _colorValue = c.argb),
+                        child: Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: Color(c.argb),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _colorValue == c.argb
+                                  ? scheme.onSurface
+                                  : Colors.transparent,
+                              width: 2.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: _name,
+                  maxLength: 24,
+                  decoration: const InputDecoration(
+                    labelText: '表示名',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _saving ? null : () => Navigator.pop(context),
+                        child: const Text('キャンセル'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _saving ? null : _save,
+                        child: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('保存'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }

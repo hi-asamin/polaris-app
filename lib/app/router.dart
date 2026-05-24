@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:polaris/features/account/presentation/account_screen.dart';
+import 'package:polaris/features/account/presentation/user_profile_provider.dart';
 import 'package:polaris/features/discover/presentation/curation_detail_screen.dart';
 import 'package:polaris/features/discover/presentation/discover_screen.dart';
 import 'package:polaris/features/folders/presentation/folder_detail_screen.dart';
@@ -9,6 +10,7 @@ import 'package:polaris/features/folders/presentation/folders_screen.dart';
 import 'package:polaris/features/home/presentation/home_shell.dart';
 import 'package:polaris/features/lists/presentation/list_detail_screen.dart';
 import 'package:polaris/features/map/presentation/map_screen.dart';
+import 'package:polaris/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:polaris/features/settings/presentation/settings_screen.dart';
 import 'package:polaris/features/sharing/share_card_screen.dart';
 import 'package:polaris/features/sharing/spot_share_screen.dart';
@@ -24,9 +26,27 @@ final _discoverNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'discover');
 final _accountNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'account');
 
 final routerProvider = Provider<GoRouter>((ref) {
+  // PolarisApp が userProfile の resolve を待ってから router を構築する前提。
+  // よってここでは同期的に value を読める。
+  final isOnboarded = ref.read(userProfileProvider).value != null;
+
+  // 後続でプロフィール状態が変わったら redirect を再評価させる。
+  final refresh = _RouterRefreshListenable();
+  ref.listen(userProfileProvider, (_, _) => refresh._fire());
+  ref.onDispose(refresh.dispose);
+
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/map',
+    initialLocation: isOnboarded ? '/map' : '/onboarding',
+    refreshListenable: refresh,
+    redirect: (context, state) {
+      final p = ref.read(userProfileProvider).value;
+      final onboarded = p != null;
+      final goingToOnboarding = state.matchedLocation == '/onboarding';
+      if (!onboarded && !goingToOnboarding) return '/onboarding';
+      if (onboarded && goingToOnboarding) return '/map';
+      return null;
+    },
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) =>
@@ -146,6 +166,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           curationId: state.pathParameters['curationId']!,
         ),
       ),
+      GoRoute(
+        path: '/onboarding',
+        name: 'onboarding',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const OnboardingScreen(),
+      ),
     ],
   );
 });
+
+/// userProfile の変化を go_router に通知するためだけの薄い ChangeNotifier。
+class _RouterRefreshListenable extends ChangeNotifier {
+  void _fire() => notifyListeners();
+}

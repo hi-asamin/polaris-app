@@ -91,6 +91,22 @@ class SpotLists extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// ユーザープロフィール (Phase 1 では端末ローカル、1 行のみ存在)。
+/// 同期は Phase 2 で導入予定。id は常に "current"。
+@DataClassName('UserProfileRow')
+class UserProfiles extends Table {
+  TextColumn get id => text()();
+  TextColumn get displayName => text()();
+  IntColumn get avatarColorValue => integer()();
+  TextColumn get sampleSet => text().nullable()();
+  IntColumn get onboardedAt => integer()();
+  IntColumn get createdAt => integer()();
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('VisitRow')
 class Visits extends Table {
   TextColumn get id => text()();

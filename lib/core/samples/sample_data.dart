@@ -4,11 +4,52 @@ import 'package:drift/drift.dart';
 import 'package:polaris/core/db/app_database.dart';
 import 'package:polaris/core/mock/mock_data.dart';
 
-/// 初回起動時にモックデータを DB に投入する。
-/// すでに folder が 1 件でも入っていれば何もしない (デモ用)。
-Future<void> seedIfEmpty(AppDatabase db) async {
-  final existing = await (db.select(db.folders)..limit(1)).get();
-  if (existing.isNotEmpty) return;
+/// オンボーディングで選べるサンプルデータセット。
+enum SampleSet {
+  tokyo('tokyo'),
+  kyoto('kyoto'),
+  none('none');
+
+  const SampleSet(this.key);
+  final String key;
+
+  static SampleSet? fromKey(String? key) {
+    if (key == null) return null;
+    for (final v in SampleSet.values) {
+      if (v.key == key) return v;
+    }
+    return null;
+  }
+}
+
+/// 選択されたサンプルセットに応じて DB に初期データを投入する。
+///
+/// [set] が [SampleSet.none] の場合は何もしない。既存データがある場合 (= 過去
+/// オンボーディング済みで再実行された場合) はそのまま追加挿入してしまうため、
+/// 呼び出し側で「初回のみ」を保証すること。
+Future<void> loadSample(AppDatabase db, SampleSet set) async {
+  if (set == SampleSet.none) return;
+
+  final folderIds = _folderIdsFor(set);
+  if (folderIds.isEmpty) return;
+
+  final folders = MockData.folders.where((f) => folderIds.contains(f.id)).toList();
+  final lists = MockData.lists.where((l) => folderIds.contains(l.folderId)).toList();
+  final listIds = lists.map((l) => l.id).toSet();
+
+  // どのスポットを取り込むかは spotListPairs から逆引きする
+  // (= 選択フォルダ配下のリストに 1 つでも含まれているスポット)。
+  final pairIndices = <int>[];
+  final keepSpotIds = <String>{};
+  for (var i = 0; i < MockData.spotListPairs.length; i++) {
+    final pair = MockData.spotListPairs[i];
+    if (!listIds.contains(pair.listId)) continue;
+    pairIndices.add(i);
+    keepSpotIds.add(pair.spotId);
+  }
+  final spots = MockData.spots.where((s) => keepSpotIds.contains(s.id)).toList();
+  final visits =
+      MockData.visits.where((v) => keepSpotIds.contains(v.spotId)).toList();
 
   await db.batch((batch) {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -16,7 +57,7 @@ Future<void> seedIfEmpty(AppDatabase db) async {
     batch.insertAll(
       db.folders,
       [
-        for (final f in MockData.folders)
+        for (final f in folders)
           FoldersCompanion.insert(
             id: f.id,
             name: f.name,
@@ -33,7 +74,7 @@ Future<void> seedIfEmpty(AppDatabase db) async {
     batch.insertAll(
       db.lists,
       [
-        for (final l in MockData.lists)
+        for (final l in lists)
           ListsCompanion.insert(
             id: l.id,
             folderId: l.folderId,
@@ -52,7 +93,7 @@ Future<void> seedIfEmpty(AppDatabase db) async {
     batch.insertAll(
       db.spots,
       [
-        for (final s in MockData.spots)
+        for (final s in spots)
           SpotsCompanion.insert(
             id: s.id,
             placeId: s.placeId,
@@ -86,9 +127,9 @@ Future<void> seedIfEmpty(AppDatabase db) async {
     batch.insertAll(
       db.spotLists,
       [
-        for (var i = 0; i < MockData.spotListPairs.length; i++)
+        for (final i in pairIndices)
           SpotListsCompanion.insert(
-            id: 'spotlist-mock-$i',
+            id: 'spotlist-sample-${set.key}-$i',
             spotId: MockData.spotListPairs[i].spotId,
             listId: MockData.spotListPairs[i].listId,
             orderIndex: i,
@@ -102,7 +143,7 @@ Future<void> seedIfEmpty(AppDatabase db) async {
     batch.insertAll(
       db.visits,
       [
-        for (final v in MockData.visits)
+        for (final v in visits)
           VisitsCompanion.insert(
             id: v.id,
             spotId: v.spotId,
@@ -120,4 +161,16 @@ Future<void> seedIfEmpty(AppDatabase db) async {
       ],
     );
   });
+}
+
+Set<String> _folderIdsFor(SampleSet set) {
+  switch (set) {
+    case SampleSet.tokyo:
+      // 東京 + デート候補 (どちらも首都圏なのでセットで入れる)
+      return {'folder-tokyo', 'folder-date'};
+    case SampleSet.kyoto:
+      return {'folder-kyoto'};
+    case SampleSet.none:
+      return const {};
+  }
 }
