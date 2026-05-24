@@ -122,7 +122,7 @@ class SpotCard extends StatelessWidget {
                           ),
                         ],
                         const Spacer(),
-                        if (spot.wantToVisit)
+                        if (spot.isFavorite)
                           Icon(
                             Icons.favorite_rounded,
                             size: 16,

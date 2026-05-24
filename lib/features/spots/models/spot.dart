@@ -34,6 +34,9 @@ abstract class Spot with _$Spot {
     String? editorialSummary,
     String? googleMapsUri,
     DateTime? createdAt,
+    // wantToVisit は「行きたい」リスト所属で表現する方針に移行したため
+    // 廃止予定。互換のためフィールドは残すが、UI からは参照しない。
     @Default(false) bool wantToVisit,
+    @Default(false) bool isFavorite,
   }) = _Spot;
 }

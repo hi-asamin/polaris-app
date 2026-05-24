@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
+import 'package:polaris/features/visits/presentation/visits_provider.dart';
 
 /// 任意のスポットを、フォルダ → リストの 2 階層ツリーから多選択保存する
 /// 共通ボトムシート。spot_detail / search / curation 詳細から共通で利用。
@@ -32,6 +34,14 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
           .where((p) => p.spotId == widget.spotId)
           .map((p) => p.listId)
           .toSet();
+      // 未訪問なら「行きたい」リストにデフォルトでチェックを入れる。
+      // (既存所属リストが何も無い新規保存時のデフォルト提案)
+      final isVisited = ref
+          .read(allVisitsProvider)
+          .any((v) => v.spotId == widget.spotId);
+      if (!isVisited && _selected.isEmpty) {
+        _selected.add(SystemIds.wantListId);
+      }
       _initialized = true;
     }
 

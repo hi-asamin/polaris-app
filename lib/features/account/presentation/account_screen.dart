@@ -14,9 +14,9 @@ import 'package:polaris/shared/widgets/photo_collage.dart' show PhotoCollage;
 
 /// アカウントタブで表示するグリッドの 3 軸。
 /// - visited: visits テーブルに記録のあるスポット (= 過去のアルバム)
-/// - wantToVisit: Spot.wantToVisit == true の未訪問スポット (= 行きたい)
-/// - saved: 何らかのリストに所属するスポット (= リスト保存)
-enum AccountTab { visited, wantToVisit, saved }
+/// - favorite: Spot.isFavorite == true のお気に入り
+/// - saved: 何らかのリストに所属するスポット (= リスト保存全体)
+enum AccountTab { visited, favorite, saved }
 
 class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
@@ -49,10 +49,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     switch (_tab) {
       case AccountTab.visited:
         base = all.where((s) => visitedSpotIds.contains(s.id));
-      case AccountTab.wantToVisit:
-        base = all.where(
-          (s) => s.wantToVisit && !visitedSpotIds.contains(s.id),
-        );
+      case AccountTab.favorite:
+        base = all.where((s) => s.isFavorite);
       case AccountTab.saved:
         base = all.where((s) => listMemberSpotIds.contains(s.id));
     }
@@ -63,8 +61,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     switch (_tab) {
       case AccountTab.visited:
         return 'まだ訪れた場所がありません';
-      case AccountTab.wantToVisit:
-        return '気になる場所はハートで保存しよう';
+      case AccountTab.favorite:
+        return 'ハートを押した場所がここに集まります';
       case AccountTab.saved:
         return 'リストに保存された場所はまだありません';
     }
@@ -375,9 +373,9 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
           Expanded(
             child: _ActiveTabIndicator(
               icon: Icons.favorite_border_rounded,
-              isActive: activeTab == AccountTab.wantToVisit,
-              tooltip: '行きたい',
-              onTap: () => onSelect(AccountTab.wantToVisit),
+              isActive: activeTab == AccountTab.favorite,
+              tooltip: 'お気に入り',
+              onTap: () => onSelect(AccountTab.favorite),
             ),
           ),
           Expanded(

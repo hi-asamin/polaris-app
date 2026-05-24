@@ -51,13 +51,13 @@ class SpotsRepository {
         .insertOnConflictUpdate(_toCompanion(s, nowMs: ms));
   }
 
-  Future<void> toggleWantToVisit(String id) async {
+  Future<void> toggleFavorite(String id) async {
     final ms = DateTime.now().millisecondsSinceEpoch;
     final current = await getById(id);
     if (current == null) return;
     await (_db.update(_db.spots)..where((t) => t.id.equals(id))).write(
       SpotsCompanion(
-        wantToVisit: Value(!current.wantToVisit),
+        isFavorite: Value(!current.isFavorite),
         updatedAt: Value(ms),
       ),
     );
@@ -140,6 +140,7 @@ class SpotsRepository {
       editorialSummary: Value(s.editorialSummary),
       googleMapsUri: Value(s.googleMapsUri),
       wantToVisit: Value(s.wantToVisit),
+      isFavorite: Value(s.isFavorite),
     );
   }
 
@@ -177,6 +178,7 @@ class SpotsRepository {
       googleMapsUri: r.googleMapsUri,
       createdAt: DateTime.fromMillisecondsSinceEpoch(r.createdAt),
       wantToVisit: r.wantToVisit,
+      isFavorite: r.isFavorite,
     );
   }
 }

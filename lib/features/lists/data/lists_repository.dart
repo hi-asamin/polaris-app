@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:polaris/core/db/app_database.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/features/lists/models/spot_list.dart';
 
 class ListsRepository {
@@ -67,6 +68,9 @@ class ListsRepository {
   }
 
   Future<void> softDelete(String id) async {
+    if (SystemIds.protectedListIds.contains(id)) {
+      throw StateError('System list cannot be deleted: $id');
+    }
     final ms = DateTime.now().millisecondsSinceEpoch;
     await (_db.update(_db.lists)..where((t) => t.id.equals(id))).write(
       ListsCompanion(deletedAt: Value(ms), updatedAt: Value(ms)),

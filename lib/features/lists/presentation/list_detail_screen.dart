@@ -222,7 +222,7 @@ class _PinSpotCard extends StatelessWidget {
                       color: cat.color.withValues(alpha: 0.18),
                       child: Icon(cat.icon, color: cat.color, size: 32),
                     ),
-                  if (spot.wantToVisit)
+                  if (spot.isFavorite)
                     Positioned(
                       top: 8,
                       right: 8,

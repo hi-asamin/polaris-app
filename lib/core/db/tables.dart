@@ -61,7 +61,10 @@ class Spots extends Table {
   TextColumn get userMemo => text().nullable()();
   TextColumn get editorialSummary => text().nullable()();
   TextColumn get googleMapsUri => text().nullable()();
+  // wantToVisit は廃止予定 (v4 で is_favorite を導入、「行きたい」は
+  // 「行きたい」システムリストへの所属で表現)。互換のため列は残す。
   BoolColumn get wantToVisit => boolean().withDefault(const Constant(false))();
+  BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   IntColumn get lastPlaceSyncedAt => integer()();
   IntColumn get createdAt => integer()();
   IntColumn get updatedAt => integer()();

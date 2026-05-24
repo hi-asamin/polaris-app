@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/database_provider.dart';
+import 'package:polaris/core/db/system_entities.dart';
+import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/visits/data/visits_repository.dart';
 import 'package:polaris/features/visits/models/visit.dart';
 
@@ -17,6 +19,11 @@ class VisitsNotifier extends AsyncNotifier<List<Visit>> {
   Future<void> create(Visit v) async {
     final repo = ref.read(visitsRepositoryProvider);
     await repo.insert(v);
+    // 訪問記録ができたら「行きたい」リストから自動で外す。
+    // (= もう行ったので「行きたい」状態は終わり)
+    await ref
+        .read(spotListPairsNotifierProvider.notifier)
+        .remove(v.spotId, SystemIds.wantListId);
     state = AsyncData(await repo.list());
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/models/folder.dart';
@@ -226,22 +227,23 @@ class _FavoriteFolderCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                InkResponse(
-                  onTap: () => _showDeleteFolderDialog(
-                    context,
-                    folder.id,
-                    folder.name,
-                  ),
-                  radius: 18,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 18,
-                      color: scheme.onSurfaceVariant,
+                if (!SystemIds.protectedFolderIds.contains(folder.id))
+                  InkResponse(
+                    onTap: () => _showDeleteFolderDialog(
+                      context,
+                      folder.id,
+                      folder.name,
+                    ),
+                    radius: 18,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 18,
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 2),

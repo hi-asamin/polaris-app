@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
@@ -237,24 +238,25 @@ class _FavoriteListCard extends ConsumerWidget {
                     ),
                   ),
                 ),
-                InkResponse(
-                  onTap: () => showDialog<void>(
-                    context: context,
-                    builder: (_) => _DeleteListDialog(
-                      listId: list.id,
-                      listName: list.name,
+                if (!SystemIds.protectedListIds.contains(list.id))
+                  InkResponse(
+                    onTap: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => _DeleteListDialog(
+                        listId: list.id,
+                        listName: list.name,
+                      ),
+                    ),
+                    radius: 18,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 18,
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                  radius: 18,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 18,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 2),

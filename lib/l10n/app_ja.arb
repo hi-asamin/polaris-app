@@ -58,6 +58,8 @@
   "@spotDetailVisitCount": {"placeholders": {"count": {"type": "int"}}},
   "spotDetailWantToVisit": "行きたい",
   "spotDetailWantToVisitOn": "行きたいに追加済み",
+  "spotDetailFavorite": "お気に入り",
+  "spotDetailFavoriteOn": "お気に入り済み",
   "spotDetailAddVisit": "訪問を記録する",
   "spotDetailOpenInMaps": "Googleマップで開く",
   "spotDetailMemoLabel": "メモ",

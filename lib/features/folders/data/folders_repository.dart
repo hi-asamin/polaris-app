@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:polaris/core/db/app_database.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/features/folders/models/folder.dart';
 
 class FoldersRepository {
@@ -55,6 +56,9 @@ class FoldersRepository {
   }
 
   Future<void> softDelete(String id) async {
+    if (SystemIds.protectedFolderIds.contains(id)) {
+      throw StateError('System folder cannot be deleted: $id');
+    }
     final ms = DateTime.now().millisecondsSinceEpoch;
     await (_db.update(_db.folders)..where((t) => t.id.equals(id))).write(
       FoldersCompanion(deletedAt: Value(ms), updatedAt: Value(ms)),

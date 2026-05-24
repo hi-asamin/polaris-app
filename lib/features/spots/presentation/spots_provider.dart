@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/database_provider.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/core/network/places_api_client.dart';
 import 'package:polaris/core/network/places_api_provider.dart';
 import 'package:polaris/core/utils/id.dart';
@@ -7,6 +8,7 @@ import 'package:polaris/features/discover/data/curation_mock.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/data/spots_repository.dart';
 import 'package:polaris/features/spots/models/spot.dart';
+import 'package:polaris/features/visits/presentation/visits_provider.dart';
 
 final spotsRepositoryProvider = Provider<SpotsRepository>((ref) {
   return SpotsRepository(ref.watch(databaseProvider));
@@ -19,9 +21,9 @@ class SpotsNotifier extends AsyncNotifier<List<Spot>> {
     return repo.list();
   }
 
-  Future<void> toggleWantToVisit(String spotId) async {
+  Future<void> toggleFavorite(String spotId) async {
     final repo = ref.read(spotsRepositoryProvider);
-    await repo.toggleWantToVisit(spotId);
+    await repo.toggleFavorite(spotId);
     state = AsyncData(await repo.list());
   }
 
@@ -134,8 +136,24 @@ final spotsByListProvider = Provider.family<List<Spot>, String>((ref, listId) {
   return spots.where((s) => spotIds.contains(s.id)).toList();
 });
 
+/// 「行きたい」 = システム「行きたい」リスト所属。
+/// Spot.wantToVisit フラグからの派生ではなく、spot_lists の所属で判定する。
+final wantListSpotIdsProvider = Provider<Set<String>>((ref) {
+  final pairs = ref.watch(spotListPairsProvider);
+  return pairs
+      .where((p) => p.listId == SystemIds.wantListId)
+      .map((p) => p.spotId)
+      .toSet();
+});
+
 final wantToVisitSpotsProvider = Provider<List<Spot>>((ref) {
-  return ref.watch(allSpotsProvider).where((s) => s.wantToVisit).toList();
+  final ids = ref.watch(wantListSpotIdsProvider);
+  return ref.watch(allSpotsProvider).where((s) => ids.contains(s.id)).toList();
+});
+
+/// 「お気に入り」 = Spot.isFavorite フラグ。
+final favoriteSpotsProvider = Provider<List<Spot>>((ref) {
+  return ref.watch(allSpotsProvider).where((s) => s.isFavorite).toList();
 });
 
 class SpotFilter {
@@ -213,6 +231,11 @@ final filteredSpotsProvider = Provider<List<Spot>>((ref) {
   final spots = ref.watch(allSpotsProvider);
   final filter = ref.watch(spotFilterProvider);
   final pairs = ref.watch(spotListPairsProvider);
+  final wantIds = ref.watch(wantListSpotIdsProvider);
+  final visitedIds = ref
+      .watch(allVisitsProvider)
+      .map((v) => v.spotId)
+      .toSet();
 
   if (filter.isEmpty) return spots;
 
@@ -222,6 +245,19 @@ final filteredSpotsProvider = Provider<List<Spot>>((ref) {
             .where((p) => filter.listIds.contains(p.listId))
             .map((p) => p.spotId)
             .toSet();
+
+  bool matchesVisitState(Spot s) {
+    switch (filter.visitState) {
+      case VisitFilterState.all:
+        return true;
+      case VisitFilterState.visited:
+        return visitedIds.contains(s.id);
+      case VisitFilterState.notVisited:
+        return !visitedIds.contains(s.id);
+      case VisitFilterState.wantToVisit:
+        return wantIds.contains(s.id);
+    }
+  }
 
   return spots.where((s) {
     if (filter.categories.isNotEmpty &&
@@ -235,6 +271,7 @@ final filteredSpotsProvider = Provider<List<Spot>>((ref) {
     if (allowedSpotIdsByList != null && !allowedSpotIdsByList.contains(s.id)) {
       return false;
     }
+    if (!matchesVisitState(s)) return false;
     return true;
   }).toList();
 });

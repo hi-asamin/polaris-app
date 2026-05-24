@@ -66,18 +66,18 @@ class SpotDetailScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: IconButton(
                   style: glassStyle,
-                  tooltip: l.spotDetailWantToVisit,
+                  tooltip: l.spotDetailFavorite,
                   onPressed: () {
                     HapticFeedback.mediumImpact();
                     ref
                         .read(spotsNotifierProvider.notifier)
-                        .toggleWantToVisit(spot.id);
+                        .toggleFavorite(spot.id);
                   },
                   icon: Icon(
-                    spot.wantToVisit
+                    spot.isFavorite
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
-                    color: spot.wantToVisit
+                    color: spot.isFavorite
                         ? const Color(0xFFFF5C7A)
                         : Colors.white,
                   ),
