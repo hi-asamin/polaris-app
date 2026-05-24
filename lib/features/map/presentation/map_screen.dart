@@ -1,4 +1,4 @@
-import 'dart:ui' as ui;
+import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +10,7 @@ import 'package:google_maps_cluster_manager_2/google_maps_cluster_manager_2.dart
 import 'package:google_maps_flutter/google_maps_flutter.dart'
     hide Cluster, ClusterManager;
 import 'package:polaris/core/location/location_service.dart';
+import 'package:polaris/features/map/presentation/widgets/spot_pin_painter.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 import 'package:polaris/features/spots/models/spot_category_x.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
@@ -34,6 +35,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   ClusterManager<_SpotItem>? _clusterManager;
   Set<Marker> _markers = {};
   List<_SpotItem> _items = const [];
+
+  // BitmapDescriptor のキャッシュ。同一キーが何度問い合わせられても 1 回しか
+  // 描かない。キーは "spot:<id>:sel=<bool>" (単独ピン) と
+  // "cluster:<id>:<count>:cat=<name>:sel=<bool>" (クラスタピン)。
+  final Map<String, BitmapDescriptor> _bitmapCache = {};
+  final Set<String> _bitmapInFlight = {};
 
   @override
   void dispose() {
@@ -64,27 +71,128 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     manager.setItems(_items);
   }
 
+  void _selectSpot(String? spotId) {
+    if (_selectedSpotId == spotId) return;
+    setState(() => _selectedSpotId = spotId);
+    // 選択強調を反映するためマーカーを再描画。
+    _clusterManager?.updateMap();
+  }
+
   Future<Marker> _buildClusterMarker(Cluster<_SpotItem> cluster) async {
     if (!cluster.isMultiple) {
       final s = cluster.items.first.spot;
+      final isSelected = s.id == _selectedSpotId;
+      final icon = _resolveSpotPin(s, selected: isSelected);
       return Marker(
         markerId: MarkerId(s.id),
         position: LatLng(s.lat, s.lng),
-        icon: BitmapDescriptor.defaultMarkerWithHue(_hueFor(s.primaryCategory)),
+        icon: icon,
         infoWindow: InfoWindow(
           title: s.name,
           snippet: s.address,
           onTap: () => context.push('/spots/${s.id}'),
         ),
-        onTap: () => setState(() => _selectedSpotId = s.id),
+        onTap: () => _selectSpot(s.id),
       );
     }
-    final icon = await _buildClusterBitmap(cluster.count);
+    final spots = cluster.items.map((it) => it.spot).toList();
+    final dominant = SpotPinPainter.dominantCategory(spots);
+    final containsSelected =
+        _selectedSpotId != null && spots.any((s) => s.id == _selectedSpotId);
+    final icon = _resolveClusterPin(
+      clusterId: cluster.getId(),
+      count: cluster.count,
+      color: dominant.color,
+      selected: containsSelected,
+    );
     return Marker(
       markerId: MarkerId(cluster.getId()),
       position: cluster.location,
       icon: icon,
-      onTap: () => _zoomToCluster(cluster),
+      onTap: () => _showClusterSheet(cluster, spots),
+    );
+  }
+
+  // ----- bitmap キャッシュ (同期的に取り出し、未生成なら非同期で作って次の
+  // updateMap で差し替える) -----
+
+  BitmapDescriptor _resolveSpotPin(Spot spot, {required bool selected}) {
+    final key = 'spot:${spot.id}:sel=$selected';
+    final cached = _bitmapCache[key];
+    if (cached != null) return cached;
+    if (!_bitmapInFlight.contains(key)) {
+      _bitmapInFlight.add(key);
+      SpotPinPainter.buildSpotPin(
+        context: context,
+        spot: spot,
+        selected: selected,
+      ).then(
+        (bd) {
+          _bitmapCache[key] = bd;
+          _bitmapInFlight.remove(key);
+          if (!mounted) return;
+          _clusterManager?.updateMap();
+        },
+        onError: (Object _) => _bitmapInFlight.remove(key),
+      );
+    }
+    // 完成までは default marker でつなぐ
+    return BitmapDescriptor.defaultMarkerWithHue(_hueFor(spot.primaryCategory));
+  }
+
+  BitmapDescriptor _resolveClusterPin({
+    required String clusterId,
+    required int count,
+    required Color color,
+    required bool selected,
+  }) {
+    final key = 'cluster:$clusterId:$count:${color.toARGB32()}:sel=$selected';
+    final cached = _bitmapCache[key];
+    if (cached != null) return cached;
+    if (!_bitmapInFlight.contains(key)) {
+      _bitmapInFlight.add(key);
+      SpotPinPainter.buildClusterPin(
+        context: context,
+        count: count,
+        color: color,
+        selected: selected,
+      ).then(
+        (bd) {
+          _bitmapCache[key] = bd;
+          _bitmapInFlight.remove(key);
+          if (!mounted) return;
+          _clusterManager?.updateMap();
+        },
+        onError: (Object _) => _bitmapInFlight.remove(key),
+      );
+    }
+    return BitmapDescriptor.defaultMarker;
+  }
+
+  // ----- インタラクション -----
+
+  Future<void> _showClusterSheet(
+    Cluster<_SpotItem> cluster,
+    List<Spot> spots,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetCtx) {
+        return _ClusterSpotsSheet(
+          spots: spots,
+          onTapSpot: (s) async {
+            Navigator.pop(sheetCtx);
+            _selectSpot(s.id);
+            await _centerOnSpot(s);
+          },
+          onZoomIn: () async {
+            Navigator.pop(sheetCtx);
+            await _zoomToCluster(cluster);
+          },
+        );
+      },
     );
   }
 
@@ -97,62 +205,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         cluster.location,
         (currentZoom + 2).clamp(3.0, 20.0),
       ),
-    );
-  }
-
-  Future<BitmapDescriptor> _buildClusterBitmap(int count) async {
-    final scheme = Theme.of(context).colorScheme;
-    final ratio = MediaQuery.devicePixelRatioOf(context);
-    const logicalSize = 56.0;
-    final size = (logicalSize * ratio).round();
-
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final center = Offset(size / 2, size / 2);
-
-    canvas.drawCircle(
-      center,
-      size / 2,
-      Paint()..color = scheme.primary.withValues(alpha: 0.25),
-    );
-    canvas.drawCircle(
-      center,
-      size / 2.4,
-      Paint()..color = scheme.primary,
-    );
-    canvas.drawCircle(
-      center,
-      size / 2.4,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = (2.5 * ratio),
-    );
-
-    final painter = TextPainter(textDirection: TextDirection.ltr)
-      ..text = TextSpan(
-        text: count > 99 ? '99+' : count.toString(),
-        style: TextStyle(
-          fontSize: 16 * ratio,
-          color: scheme.onPrimary,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.2,
-        ),
-      )
-      ..layout();
-    painter.paint(
-      canvas,
-      Offset(
-        center.dx - painter.width / 2,
-        center.dy - painter.height / 2,
-      ),
-    );
-
-    final image = await recorder.endRecording().toImage(size, size);
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(
-      data!.buffer.asUint8List(),
-      imagePixelRatio: ratio,
     );
   }
 
@@ -219,7 +271,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               compassEnabled: false,
               // 上の検索バー・チップ分のスペースを地図のロゴ/コントロールが避けるように
               padding: const EdgeInsets.only(top: 160, bottom: 200),
-              onTap: (_) => setState(() => _selectedSpotId = null),
+              onTap: (_) => _selectSpot(null),
             ),
           ),
           if (spots.isEmpty)
@@ -271,7 +323,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             spots: spots,
             selectedSpotId: _selectedSpotId,
             onSelect: (s) async {
-              setState(() => _selectedSpotId = s.id);
+              _selectSpot(s.id);
               await _centerOnSpot(s);
             },
           ),
@@ -635,6 +687,163 @@ class _SpotMiniCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// クラスタタップで開く、含まれるスポットの一覧シート。
+class _ClusterSpotsSheet extends StatelessWidget {
+  const _ClusterSpotsSheet({
+    required this.spots,
+    required this.onTapSpot,
+    required this.onZoomIn,
+  });
+
+  final List<Spot> spots;
+  final ValueChanged<Spot> onTapSpot;
+  final VoidCallback onZoomIn;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'このエリアのスポット',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          '${spots.length} 件',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: onZoomIn,
+                    icon: const Icon(Icons.zoom_in, size: 18),
+                    label: const Text('拡大表示'),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: spots.length,
+                separatorBuilder: (_, _) =>
+                    const Divider(height: 1, indent: 88, endIndent: 16),
+                itemBuilder: (context, i) {
+                  final s = spots[i];
+                  final firstPhoto =
+                      s.photoUrls.isNotEmpty ? s.photoUrls.first : null;
+                  return ListTile(
+                    onTap: () => onTapSpot(s),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 4,
+                    ),
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: SizedBox(
+                        width: 56,
+                        height: 56,
+                        child: firstPhoto != null
+                            ? CachedNetworkImage(
+                                imageUrl: firstPhoto,
+                                fit: BoxFit.cover,
+                                placeholder: (c, _) => Container(
+                                  color: scheme.surfaceContainerHighest,
+                                ),
+                                errorWidget: (c, _, _) => _CategoryFallback(
+                                  category: s.primaryCategory,
+                                ),
+                              )
+                            : _CategoryFallback(category: s.primaryCategory),
+                      ),
+                    ),
+                    title: Text(
+                      s.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Row(
+                      children: [
+                        Icon(
+                          s.primaryCategory.icon,
+                          size: 12,
+                          color: s.primaryCategory.color,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            s.address ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: s.rating != null
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 14,
+                                color: Color(0xFFFFC107),
+                              ),
+                              const SizedBox(width: 2),
+                              Text(s.rating!.toStringAsFixed(1)),
+                            ],
+                          )
+                        : null,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CategoryFallback extends StatelessWidget {
+  const _CategoryFallback({required this.category});
+  final SpotCategory category;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: category.color.withValues(alpha: 0.2),
+      child: Icon(category.icon, color: category.color, size: 24),
     );
   }
 }
