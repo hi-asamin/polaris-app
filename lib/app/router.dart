@@ -8,6 +8,7 @@ import 'package:polaris/features/home/presentation/home_shell.dart';
 import 'package:polaris/features/lists/presentation/list_detail_screen.dart';
 import 'package:polaris/features/map/presentation/map_screen.dart';
 import 'package:polaris/features/settings/presentation/settings_screen.dart';
+import 'package:polaris/features/sharing/share_card_screen.dart';
 import 'package:polaris/features/spots/presentation/search_screen.dart';
 import 'package:polaris/features/spots/presentation/spot_detail_screen.dart';
 import 'package:polaris/features/visits/presentation/visits_screen.dart';
@@ -106,6 +107,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'settings',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/share/folder/:folderId',
+        name: 'shareFolder',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ShareCardScreen(
+          folderId: state.pathParameters['folderId']!,
+        ),
       ),
     ],
   );

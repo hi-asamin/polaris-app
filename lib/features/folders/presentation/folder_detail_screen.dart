@@ -53,7 +53,8 @@ class FolderDetailScreen extends ConsumerWidget {
             actionsIconTheme: const IconThemeData(color: Colors.white),
             actions: [
               IconButton(
-                onPressed: () {},
+                tooltip: 'シェア',
+                onPressed: () => context.push('/share/folder/$folderId'),
                 icon: const Icon(Icons.ios_share_rounded),
               ),
               IconButton(
