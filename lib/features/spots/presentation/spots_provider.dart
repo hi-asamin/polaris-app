@@ -3,6 +3,7 @@ import 'package:polaris/core/db/database_provider.dart';
 import 'package:polaris/core/network/places_api_client.dart';
 import 'package:polaris/core/network/places_api_provider.dart';
 import 'package:polaris/core/utils/id.dart';
+import 'package:polaris/features/discover/data/curation_mock.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/data/spots_repository.dart';
 import 'package:polaris/features/spots/models/spot.dart';
@@ -44,6 +45,31 @@ class SpotsNotifier extends AsyncNotifier<List<Spot>> {
     final details = await client.details(spot.placeId);
     await repo.applyPlaceDetails(spotId, details);
     state = AsyncData(await repo.list());
+  }
+
+  /// キュレーションスポット (静的データ) を DB に保存。
+  /// 既存 placeId なら既存 Spot.id を返す。新規なら最低限の情報で insert。
+  /// モック期は Place ID がダミーなので details 取得は試みない。
+  Future<String> saveFromCurationSpot(CurationSpot spot) async {
+    final repo = ref.read(spotsRepositoryProvider);
+    final existing = await repo.getByPlaceId(spot.placeId);
+    if (existing != null) return existing.id;
+
+    final id = newId();
+    final newSpot = Spot(
+      id: id,
+      placeId: spot.placeId,
+      name: spot.name,
+      lat: spot.lat,
+      lng: spot.lng,
+      address: spot.address,
+      rating: spot.rating,
+      photoUrls: spot.photoUrls,
+      userMemo: spot.editorialNote,
+    );
+    await repo.upsert(newSpot);
+    state = AsyncData(await repo.list());
+    return id;
   }
 
   /// Places 検索結果から新規スポットを DB に保存。

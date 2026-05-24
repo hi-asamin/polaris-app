@@ -204,7 +204,7 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return GestureDetector(
-      onTap: () {}, // TODO(curation): navigate to detail when implemented
+      onTap: () => context.push('/curations/${hero.id}'),
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -276,7 +276,7 @@ class _ThemeSection extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
       child: GestureDetector(
-        onTap: () {}, // TODO(curation): navigate to detail
+        onTap: () => context.push('/curations/${section.id}'),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

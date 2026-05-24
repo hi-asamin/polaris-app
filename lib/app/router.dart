@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:polaris/features/account/presentation/account_screen.dart';
+import 'package:polaris/features/discover/presentation/curation_detail_screen.dart';
 import 'package:polaris/features/discover/presentation/discover_screen.dart';
 import 'package:polaris/features/folders/presentation/folder_detail_screen.dart';
 import 'package:polaris/features/folders/presentation/folders_screen.dart';
@@ -135,6 +136,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => SpotShareScreen(
           spotId: state.pathParameters['spotId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/curations/:curationId',
+        name: 'curationDetail',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => CurationDetailScreen(
+          curationId: state.pathParameters['curationId']!,
         ),
       ),
     ],
