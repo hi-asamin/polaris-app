@@ -12,14 +12,23 @@ import 'package:polaris/features/visits/presentation/visits_provider.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
 import 'package:polaris/shared/widgets/photo_collage.dart' show PhotoCollage;
 
-class AccountScreen extends ConsumerWidget {
+/// アカウントタブで表示するグリッドの 3 軸。
+/// - visited: visits テーブルに記録のあるスポット (= 過去のアルバム)
+/// - wantToVisit: Spot.wantToVisit == true の未訪問スポット (= 行きたい)
+/// - saved: 何らかのリストに所属するスポット (= リスト保存)
+enum AccountTab { visited, wantToVisit, saved }
+
+class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 
-  Future<void> _openEditSheet(
-    BuildContext context,
-    WidgetRef ref,
-    UserProfile? current,
-  ) async {
+  @override
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends ConsumerState<AccountScreen> {
+  AccountTab _tab = AccountTab.visited;
+
+  Future<void> _openEditSheet(UserProfile? current) async {
     if (current == null) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -29,8 +38,40 @@ class AccountScreen extends ConsumerWidget {
     );
   }
 
+  /// 現在のタブに応じて表示するスポット一覧を計算する。
+  /// 各タブで「写真がある」しばりは共通 (グリッド体裁を保つため)。
+  List<Spot> _spotsForTab({
+    required List<Spot> all,
+    required Set<String> visitedSpotIds,
+    required Set<String> listMemberSpotIds,
+  }) {
+    Iterable<Spot> base;
+    switch (_tab) {
+      case AccountTab.visited:
+        base = all.where((s) => visitedSpotIds.contains(s.id));
+      case AccountTab.wantToVisit:
+        base = all.where(
+          (s) => s.wantToVisit && !visitedSpotIds.contains(s.id),
+        );
+      case AccountTab.saved:
+        base = all.where((s) => listMemberSpotIds.contains(s.id));
+    }
+    return base.where((s) => s.photoUrls.isNotEmpty).toList();
+  }
+
+  String _emptyMessage() {
+    switch (_tab) {
+      case AccountTab.visited:
+        return 'まだ訪れた場所がありません';
+      case AccountTab.wantToVisit:
+        return '気になる場所はハートで保存しよう';
+      case AccountTab.saved:
+        return 'リストに保存された場所はまだありません';
+    }
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -38,13 +79,15 @@ class AccountScreen extends ConsumerWidget {
     final folders = ref.watch(foldersProvider);
     final lists = ref.watch(listsProvider);
     final visits = ref.watch(allVisitsProvider);
+    final pairs = ref.watch(spotListPairsProvider);
     final profile = ref.watch(userProfileProvider).value;
     final visitedSpotIds = visits.map((v) => v.spotId).toSet();
-    final gridSpots = [
-      ...spots.where((s) => visitedSpotIds.contains(s.id)),
-      ...spots.where((s) => !visitedSpotIds.contains(s.id) && s.wantToVisit),
-      ...spots.where((s) => !visitedSpotIds.contains(s.id) && !s.wantToVisit),
-    ].where((s) => s.photoUrls.isNotEmpty).toList();
+    final listMemberSpotIds = pairs.map((p) => p.spotId).toSet();
+    final gridSpots = _spotsForTab(
+      all: spots,
+      visitedSpotIds: visitedSpotIds,
+      listMemberSpotIds: listMemberSpotIds,
+    );
 
     return Scaffold(
       backgroundColor: scheme.surface,
@@ -81,18 +124,22 @@ class AccountScreen extends ConsumerWidget {
                 foldersCount: folders.length,
                 listsCount: lists.length,
                 l: l,
-                onEdit: () => _openEditSheet(context, ref, profile),
+                onEdit: () => _openEditSheet(profile),
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 4)),
             SliverPersistentHeader(
               pinned: true,
-              delegate: _TabBarDelegate(scheme: scheme),
+              delegate: _TabBarDelegate(
+                scheme: scheme,
+                activeTab: _tab,
+                onSelect: (t) => setState(() => _tab = t),
+              ),
             ),
             if (gridSpots.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: _Empty(message: l.accountActivityEmpty),
+                child: _Empty(message: _emptyMessage()),
               )
             else
               SliverPadding(
@@ -281,8 +328,14 @@ class _StatCounter extends StatelessWidget {
 }
 
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
-  _TabBarDelegate({required this.scheme});
+  _TabBarDelegate({
+    required this.scheme,
+    required this.activeTab,
+    required this.onSelect,
+  });
   final ColorScheme scheme;
+  final AccountTab activeTab;
+  final ValueChanged<AccountTab> onSelect;
 
   static const double _height = 46;
 
@@ -309,24 +362,30 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
           ),
         ),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Expanded(
             child: _ActiveTabIndicator(
               icon: Icons.grid_on_rounded,
-              isActive: true,
+              isActive: activeTab == AccountTab.visited,
+              tooltip: '訪問済み',
+              onTap: () => onSelect(AccountTab.visited),
             ),
           ),
           Expanded(
             child: _ActiveTabIndicator(
               icon: Icons.favorite_border_rounded,
-              isActive: false,
+              isActive: activeTab == AccountTab.wantToVisit,
+              tooltip: '行きたい',
+              onTap: () => onSelect(AccountTab.wantToVisit),
             ),
           ),
           Expanded(
             child: _ActiveTabIndicator(
               icon: Icons.bookmark_border_rounded,
-              isActive: false,
+              isActive: activeTab == AccountTab.saved,
+              tooltip: 'リスト保存',
+              onTap: () => onSelect(AccountTab.saved),
             ),
           ),
         ],
@@ -335,31 +394,45 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) => false;
+  bool shouldRebuild(covariant _TabBarDelegate oldDelegate) =>
+      oldDelegate.activeTab != activeTab;
 }
 
 class _ActiveTabIndicator extends StatelessWidget {
-  const _ActiveTabIndicator({required this.icon, required this.isActive});
+  const _ActiveTabIndicator({
+    required this.icon,
+    required this.isActive,
+    required this.tooltip,
+    required this.onTap,
+  });
   final IconData icon;
   final bool isActive;
+  final String tooltip;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: isActive ? scheme.onSurface : Colors.transparent,
-            width: 2,
+    return InkWell(
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: isActive ? scheme.onSurface : Colors.transparent,
+              width: 2,
+            ),
           ),
         ),
-      ),
-      child: Center(
-        child: Icon(
-          icon,
-          size: 20,
-          color: isActive ? scheme.onSurface : scheme.onSurfaceVariant,
+        child: Tooltip(
+          message: tooltip,
+          child: Center(
+            child: Icon(
+              icon,
+              size: 20,
+              color: isActive ? scheme.onSurface : scheme.onSurfaceVariant,
+            ),
+          ),
         ),
       ),
     );

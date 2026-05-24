@@ -4,7 +4,7 @@
 
   "tabMap": "マップ",
   "tabLists": "リスト",
-  "tabVisits": "訪問履歴",
+  "tabVisits": "おでかけ",
   "tabSearch": "検索",
   "tabAccount": "アカウント",
   "tabSettings": "設定",
@@ -77,7 +77,7 @@
   "searchSaved": "保存済み",
   "searchEmpty": "検索結果がありません",
 
-  "visitsTitle": "訪問履歴",
+  "visitsTitle": "おでかけ",
   "visitsThisMonth": "今月",
   "visitsRecent": "最近",
   "visitsEarlier": "それ以前",
