@@ -270,7 +270,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               mapToolbarEnabled: false,
               compassEnabled: false,
               // 上の検索バー・チップ分のスペースを地図のロゴ/コントロールが避けるように
-              padding: const EdgeInsets.only(top: 160, bottom: 200),
+              padding: const EdgeInsets.only(top: 160, bottom: 32),
               onTap: (_) => _selectSpot(null),
             ),
           ),
@@ -319,17 +319,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ],
             ),
           ),
-          _BottomSpotStrip(
-            spots: spots,
-            selectedSpotId: _selectedSpotId,
-            onSelect: (s) async {
-              _selectSpot(s.id);
-              await _centerOnSpot(s);
-            },
-          ),
           Positioned(
             right: 16,
-            bottom: 200,
+            bottom: 24,
             child: Column(
               children: [
                 _MiniFab(
@@ -507,184 +499,6 @@ class _MiniFab extends StatelessWidget {
           width: 44,
           height: 44,
           child: Icon(icon, size: 20, color: scheme.onSurface),
-        ),
-      ),
-    );
-  }
-}
-
-class _BottomSpotStrip extends StatelessWidget {
-  const _BottomSpotStrip({
-    required this.spots,
-    required this.selectedSpotId,
-    required this.onSelect,
-  });
-
-  final List<Spot> spots;
-  final String? selectedSpotId;
-  final ValueChanged<Spot> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    if (spots.isEmpty) return const SizedBox.shrink();
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 16,
-      child: SizedBox(
-        height: 168,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          itemCount: spots.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 12),
-          itemBuilder: (context, i) {
-            final s = spots[i];
-            return _SpotMiniCard(
-              spot: s,
-              selected: s.id == selectedSpotId,
-              onTap: () => onSelect(s),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _SpotMiniCard extends StatelessWidget {
-  const _SpotMiniCard({
-    required this.spot,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Spot spot;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-    final firstPhoto = spot.photoUrls.isNotEmpty ? spot.photoUrls.first : null;
-    return GestureDetector(
-      onTap: () {
-        onTap();
-        Future.delayed(const Duration(milliseconds: 200), () {
-          if (context.mounted) {
-            context.push('/spots/${spot.id}');
-          }
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 280,
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? scheme.primary : Colors.transparent,
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: selected ? 0.2 : 0.1),
-              blurRadius: selected ? 16 : 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 100,
-              height: double.infinity,
-              child: firstPhoto != null
-                  ? CachedNetworkImage(
-                      imageUrl: firstPhoto,
-                      fit: BoxFit.cover,
-                      placeholder: (c, _) => Container(
-                        color: scheme.surfaceContainerHighest,
-                      ),
-                      errorWidget: (c, _, _) => Container(
-                        color: spot.primaryCategory.color.withValues(
-                          alpha: 0.2,
-                        ),
-                        child: Icon(
-                          spot.primaryCategory.icon,
-                          color: spot.primaryCategory.color,
-                          size: 32,
-                        ),
-                      ),
-                    )
-                  : Container(
-                      color: spot.primaryCategory.color.withValues(alpha: 0.2),
-                      child: Icon(
-                        spot.primaryCategory.icon,
-                        color: spot.primaryCategory.color,
-                        size: 32,
-                      ),
-                    ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          spot.name,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        if (spot.city != null)
-                          Text(
-                            spot.city!,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                            maxLines: 1,
-                          ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        if (spot.rating != null) ...[
-                          const Icon(
-                            Icons.star_rounded,
-                            size: 14,
-                            color: Color(0xFFFFC107),
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            spot.rating!.toStringAsFixed(1),
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                        const Spacer(),
-                        if (spot.wantToVisit)
-                          Icon(
-                            Icons.favorite_rounded,
-                            size: 16,
-                            color: scheme.error,
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
