@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:polaris/features/discover/data/curation_mock.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
 import 'package:polaris/features/spots/presentation/widgets/save_to_list_sheet.dart';
@@ -49,7 +50,7 @@ class CurationDetailScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(8),
               child: IconButton(
                 style: glassStyle,
-                onPressed: () => Navigator.maybePop(context),
+                onPressed: () => context.pop(),
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
               ),
             ),

@@ -57,7 +57,7 @@ class SpotDetailScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(8),
               child: IconButton(
                 style: glassStyle,
-                onPressed: () => Navigator.maybePop(context),
+                onPressed: () => context.pop(),
                 icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
               ),
             ),
