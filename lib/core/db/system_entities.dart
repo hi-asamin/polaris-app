@@ -1,76 +1,61 @@
 import 'package:drift/drift.dart';
 import 'package:polaris/core/db/app_database.dart';
 
-/// システム所属のフォルダ・リストの固定 ID。これらは削除不可。
+/// システム所属のフォルダ固定 ID。これらは削除不可。
+/// 1 階層フォルダ構造への移行後、リストの概念は廃止し、
+/// 「行きたい」はトップレベルの専用フォルダ。
 class SystemIds {
   SystemIds._();
 
-  /// デフォルトフォルダ「保存スポット」。「行きたい」リスト等の
-  /// システムリストがここに所属する。
+  /// 「行きたい」システムフォルダ。
+  /// - 未訪問スポットを保存する時にデフォルトでチェック
+  /// - 訪問記録を入れると自動で外れる
+  /// - ユーザーは手動で add/remove も可能
+  static const String wantFolderId = 'folder-system-want';
+
+  static const Set<String> protectedFolderIds = {wantFolderId};
+
+  // ---- 旧定数 (互換のため一時的に残す。v5 移行後の参照は spot_folders 経由) ----
+  @Deprecated('Use wantFolderId. Lists is being removed.')
   static const String defaultFolderId = 'folder-system-default';
-
-  /// 「行きたい」システムリスト。保存時にデフォルトでチェックされ、
-  /// 訪問時に自動で外れる。ユーザーは手動 add/remove 可能。
+  @Deprecated('Use wantFolderId. Lists is being removed.')
   static const String wantListId = 'list-system-want';
-
-  static const Set<String> protectedFolderIds = {defaultFolderId};
+  @Deprecated('Lists are being phased out.')
   static const Set<String> protectedListIds = {wantListId};
 }
 
-/// アプリ起動時にシステムリストを初期化する。
+/// アプリ起動時にシステムフォルダを初期化する。
 ///
 /// オンボーディング完了済み (= UserProfile が存在する) ユーザーに対して呼ぶ。
 /// 何度呼んでも副作用が増えない idempotent な実装。
 ///
-/// 初回実行 (= 既存ユーザー / 新規ユーザー どちらも):
-/// 1. デフォルトフォルダが無ければ作る
-/// 2. 「行きたい」リストが無ければ作る
-/// 3. spots.wantToVisit = true かつ未訪問のスポットを「行きたい」リストに
-///    バックフィル (旧 wantToVisit フラグからの移行用、1 度きり)
+/// 役目:
+/// 1. 「行きたい」システムフォルダが無ければ作る
+/// 2. spots.wantToVisit = true かつ未訪問のスポットを「行きたい」フォルダに
+///    バックフィル (旧 wantToVisit フラグ + 旧「行きたい」リストからの移行用)
+/// 3. 旧「保存スポット」フォルダが残っている場合は softDelete してリスト UI から消す
 Future<void> ensureSystemListsExist(AppDatabase db) async {
   final now = DateTime.now().millisecondsSinceEpoch;
 
-  // 1. デフォルトフォルダ
-  final existingFolder = await (db.select(db.folders)
-        ..where((t) => t.id.equals(SystemIds.defaultFolderId))
+  // 1. 「行きたい」フォルダ
+  final existingWantFolder = await (db.select(db.folders)
+        ..where((t) => t.id.equals(SystemIds.wantFolderId))
         ..limit(1))
       .getSingleOrNull();
-  if (existingFolder == null) {
-    // 既存フォルダの最後尾に置く
+  final isFirstTime = existingWantFolder == null;
+  if (isFirstTime) {
+    // ユーザーフォルダの先頭に置きたいので orderIndex は最小値 - 1
     final folders = await db.select(db.folders).get();
-    final order = folders.isEmpty
+    final minOrder = folders.isEmpty
         ? 0
-        : folders.map((f) => f.orderIndex).reduce((a, b) => a > b ? a : b) + 1;
+        : folders.map((f) => f.orderIndex).reduce((a, b) => a < b ? a : b);
     await db
         .into(db.folders)
         .insert(
           FoldersCompanion.insert(
-            id: SystemIds.defaultFolderId,
-            name: '保存スポット',
-            orderIndex: order,
-            createdAt: now,
-            updatedAt: now,
-            iconName: const Value('bookmark_rounded'),
-            colorValue: const Value(0xFF3F51B5),
-          ),
-        );
-  }
-
-  // 2. 「行きたい」リスト
-  final existingList = await (db.select(db.lists)
-        ..where((t) => t.id.equals(SystemIds.wantListId))
-        ..limit(1))
-      .getSingleOrNull();
-  final isFirstTime = existingList == null;
-  if (isFirstTime) {
-    await db
-        .into(db.lists)
-        .insert(
-          ListsCompanion.insert(
-            id: SystemIds.wantListId,
-            folderId: SystemIds.defaultFolderId,
+            id: SystemIds.wantFolderId,
             name: '行きたい',
-            orderIndex: 0,
+            orderIndex: minOrder - 1,
             createdAt: now,
             updatedAt: now,
             iconName: const Value('flag_rounded'),
@@ -79,13 +64,19 @@ Future<void> ensureSystemListsExist(AppDatabase db) async {
         );
   }
 
-  // 3. wantToVisit からのバックフィル (初回のみ)
+  // 2. wantToVisit フラグ & 旧システムリストからのバックフィル (初回のみ)
   if (isFirstTime) {
-    await _backfillWantListFromFlag(db, now);
+    await _backfillWantFolder(db, now);
   }
+
+  // 3. 旧「保存スポット」フォルダの soft delete (idempotent)
+  await (db.update(db.folders)
+        // ignore: deprecated_member_use_from_same_package
+        ..where((t) => t.id.equals(SystemIds.defaultFolderId) & t.deletedAt.isNull()))
+      .write(FoldersCompanion(deletedAt: Value(now), updatedAt: Value(now)));
 }
 
-Future<void> _backfillWantListFromFlag(AppDatabase db, int now) async {
+Future<void> _backfillWantFolder(AppDatabase db, int now) async {
   final visitedSpotIds = (await (db.select(db.visits)
             ..where((t) => t.deletedAt.isNull()))
           .get())
@@ -95,15 +86,15 @@ Future<void> _backfillWantListFromFlag(AppDatabase db, int now) async {
         ..where((t) => t.wantToVisit.equals(true) & t.deletedAt.isNull()))
       .get();
 
-  final pairs = <SpotListsCompanion>[];
+  final pairs = <SpotFoldersCompanion>[];
   var order = 0;
   for (final s in wantSpots) {
     if (visitedSpotIds.contains(s.id)) continue;
     pairs.add(
-      SpotListsCompanion.insert(
-        id: 'spotlist-system-want-${s.id}',
+      SpotFoldersCompanion.insert(
+        id: 'spotfolder-system-want-${s.id}',
         spotId: s.id,
-        listId: SystemIds.wantListId,
+        folderId: SystemIds.wantFolderId,
         orderIndex: order++,
         addedAt: now,
         createdAt: now,
@@ -113,6 +104,6 @@ Future<void> _backfillWantListFromFlag(AppDatabase db, int now) async {
   }
   if (pairs.isEmpty) return;
   await db.batch((batch) {
-    batch.insertAll(db.spotLists, pairs, mode: InsertMode.insertOrIgnore);
+    batch.insertAll(db.spotFolders, pairs, mode: InsertMode.insertOrIgnore);
   });
 }

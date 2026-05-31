@@ -6,9 +6,6 @@ import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/models/folder.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
-import 'package:polaris/features/lists/models/spot_list.dart';
-import 'package:polaris/features/lists/presentation/lists_provider.dart';
-import 'package:polaris/features/spots/presentation/spots_provider.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
 import 'package:polaris/shared/widgets/photo_collage.dart';
 
@@ -19,21 +16,10 @@ class FoldersScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = AppLocalizations.of(context);
     final folders = ref.watch(foldersProvider);
-    final lists = ref.watch(listsProvider);
 
-    // システム「保存スポット」フォルダ配下のリスト (= 「行きたい」等) は
-    // フォルダ階層を介さず、リストタブのトップレベルにカードとして直接出す。
-    // - 表示順: システムリスト → ユーザーフォルダ
-    final systemLists = lists
-        .where((l) => l.folderId == SystemIds.defaultFolderId)
-        .toList()
-      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
-    final userFolders = folders
-        .where((f) => f.id != SystemIds.defaultFolderId)
-        .toList();
-
-    final entries = <Object>[...systemLists, ...userFolders];
-
+    // 1 階層構造へ移行後、フォルダは「行きたい」(システム) + ユーザー作成
+    // フォルダがすべて並列。FoldersNotifier の orderIndex でシステムを
+    // 最上位に並べている。
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
@@ -46,7 +32,7 @@ class FoldersScreen extends ConsumerWidget {
               pinned: true,
               delegate: _SearchHeaderDelegate(l: l),
             ),
-            if (entries.isEmpty)
+            if (folders.isEmpty)
               SliverFillRemaining(child: _Empty(l: l))
             else
               SliverPadding(
@@ -59,14 +45,9 @@ class FoldersScreen extends ConsumerWidget {
                     mainAxisSpacing: 8,
                   ),
                   delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final entry = entries[i];
-                      if (entry is SpotList) {
-                        return _SystemListCard(list: entry);
-                      }
-                      return _FavoriteFolderCard(folder: entry as Folder);
-                    },
-                    childCount: entries.length,
+                    (context, i) =>
+                        _FavoriteFolderCard(folder: folders[i]),
+                    childCount: folders.length,
                   ),
                 ),
               ),
@@ -294,107 +275,6 @@ class _FavoriteFolderCard extends ConsumerWidget {
   }
 }
 
-/// システムリスト (現状は「行きたい」のみ) をフォルダ階層を介さずに
-/// リストタブのトップレベルに表示するためのカード。
-/// タップで /lists/:listId に直接遷移する。
-class _SystemListCard extends ConsumerWidget {
-  const _SystemListCard({required this.list});
-  final SpotList list;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-    final spots = ref.watch(spotsByListProvider(list.id));
-    final photos = spots
-        .expand((s) => s.photoUrls)
-        .take(4)
-        .toList(growable: false);
-    final accent = list.colorValue != null
-        ? Color(list.colorValue!)
-        : scheme.primary;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => context.push('/lists/${list.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 3 / 2,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: ColoredBox(
-                        color: scheme.surface,
-                        child: PhotoCollage(
-                          photos: photos,
-                          gap: 2,
-                          fallbackColor: accent.withValues(alpha: 0.16),
-                        ),
-                      ),
-                    ),
-                    // システムリストであることが分かるよう左上に小さな旗バッジ
-                    Positioned(
-                      top: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: scheme.surface.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.flag_rounded, size: 12, color: accent),
-                            const SizedBox(width: 4),
-                            Text(
-                              'デフォルト',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: accent,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 10,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const Spacer(),
-            Text(
-              list.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'スポット：${spots.length} 件',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _Empty extends StatelessWidget {
   const _Empty({required this.l});

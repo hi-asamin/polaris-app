@@ -79,6 +79,28 @@ class Spots extends Table {
   ];
 }
 
+/// Spot ↔ Folder の多対多 (1 階層フォルダ構造への移行後の正本)。
+/// 旧 SpotLists テーブルは互換のため残るが、新規書き込みは行わない。
+@DataClassName('SpotFolderPairRow')
+class SpotFolders extends Table {
+  TextColumn get id => text()();
+  TextColumn get spotId => text().references(Spots, #id)();
+  TextColumn get folderId => text().references(Folders, #id)();
+  IntColumn get orderIndex => integer()();
+  IntColumn get addedAt => integer()();
+  IntColumn get createdAt => integer()();
+  IntColumn get updatedAt => integer()();
+  IntColumn get deletedAt => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {spotId, folderId},
+  ];
+}
+
 @DataClassName('SpotListPairRow')
 class SpotLists extends Table {
   TextColumn get id => text()();

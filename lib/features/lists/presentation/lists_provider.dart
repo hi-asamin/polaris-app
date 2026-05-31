@@ -101,16 +101,6 @@ final spotsCountByListProvider = Provider.family<int, String>((ref, listId) {
   return pairs.where((p) => p.listId == listId).length;
 });
 
-final spotsCountByFolderProvider = Provider.family<int, String>((
-  ref,
-  folderId,
-) {
-  final lists = ref.watch(listsByFolderProvider(folderId));
-  final pairs = ref.watch(spotListPairsProvider);
-  final listIds = lists.map((l) => l.id).toSet();
-  return pairs.where((p) => listIds.contains(p.listId)).length;
-});
-
 /// リスト配下のスポット写真を最大 3 件取得 (コラージュ用)。
 /// FIXME: 現状は `MockData.spots` を直接読んでいる暫定実装。
 /// spots feature の AsyncNotifier 経由に切り替える必要があるが、

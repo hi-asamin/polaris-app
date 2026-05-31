@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/database_provider.dart';
-import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/core/network/places_api_client.dart';
 import 'package:polaris/core/network/places_api_provider.dart';
 import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/features/discover/data/curation_mock.dart';
+import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/data/spots_repository.dart';
 import 'package:polaris/features/spots/models/spot.dart';
@@ -136,18 +136,15 @@ final spotsByListProvider = Provider.family<List<Spot>, String>((ref, listId) {
   return spots.where((s) => spotIds.contains(s.id)).toList();
 });
 
-/// 「行きたい」 = システム「行きたい」リスト所属。
-/// Spot.wantToVisit フラグからの派生ではなく、spot_lists の所属で判定する。
+/// 後方互換のため残す古い別名 (実体はフォルダベース)。新規コードでは
+/// folders_provider の `wantFolderSpotIdsProvider` を使う。
+@Deprecated('Use wantFolderSpotIdsProvider in folders_provider.')
 final wantListSpotIdsProvider = Provider<Set<String>>((ref) {
-  final pairs = ref.watch(spotListPairsProvider);
-  return pairs
-      .where((p) => p.listId == SystemIds.wantListId)
-      .map((p) => p.spotId)
-      .toSet();
+  return ref.watch(wantFolderSpotIdsProvider);
 });
 
 final wantToVisitSpotsProvider = Provider<List<Spot>>((ref) {
-  final ids = ref.watch(wantListSpotIdsProvider);
+  final ids = ref.watch(wantFolderSpotIdsProvider);
   return ref.watch(allSpotsProvider).where((s) => ids.contains(s.id)).toList();
 });
 
@@ -159,25 +156,25 @@ final favoriteSpotsProvider = Provider<List<Spot>>((ref) {
 class SpotFilter {
   const SpotFilter({
     this.categories = const {},
-    this.listIds = const {},
+    this.folderIds = const {},
     this.prefectures = const {},
     this.visitState = VisitFilterState.all,
   });
 
   final Set<SpotCategory> categories;
-  final Set<String> listIds;
+  final Set<String> folderIds;
   final Set<String> prefectures;
   final VisitFilterState visitState;
 
   SpotFilter copyWith({
     Set<SpotCategory>? categories,
-    Set<String>? listIds,
+    Set<String>? folderIds,
     Set<String>? prefectures,
     VisitFilterState? visitState,
   }) {
     return SpotFilter(
       categories: categories ?? this.categories,
-      listIds: listIds ?? this.listIds,
+      folderIds: folderIds ?? this.folderIds,
       prefectures: prefectures ?? this.prefectures,
       visitState: visitState ?? this.visitState,
     );
@@ -185,7 +182,7 @@ class SpotFilter {
 
   bool get isEmpty =>
       categories.isEmpty &&
-      listIds.isEmpty &&
+      folderIds.isEmpty &&
       prefectures.isEmpty &&
       visitState == VisitFilterState.all;
 }
@@ -202,10 +199,10 @@ class SpotFilterNotifier extends Notifier<SpotFilter> {
     state = state.copyWith(categories: next);
   }
 
-  void toggleList(String listId) {
-    final next = {...state.listIds};
-    if (!next.add(listId)) next.remove(listId);
-    state = state.copyWith(listIds: next);
+  void toggleFolder(String folderId) {
+    final next = {...state.folderIds};
+    if (!next.add(folderId)) next.remove(folderId);
+    state = state.copyWith(folderIds: next);
   }
 
   void togglePrefecture(String prefecture) {
@@ -230,8 +227,8 @@ final spotFilterProvider = NotifierProvider<SpotFilterNotifier, SpotFilter>(
 final filteredSpotsProvider = Provider<List<Spot>>((ref) {
   final spots = ref.watch(allSpotsProvider);
   final filter = ref.watch(spotFilterProvider);
-  final pairs = ref.watch(spotListPairsProvider);
-  final wantIds = ref.watch(wantListSpotIdsProvider);
+  final pairs = ref.watch(spotFolderPairsProvider);
+  final wantIds = ref.watch(wantFolderSpotIdsProvider);
   final visitedIds = ref
       .watch(allVisitsProvider)
       .map((v) => v.spotId)
@@ -239,10 +236,10 @@ final filteredSpotsProvider = Provider<List<Spot>>((ref) {
 
   if (filter.isEmpty) return spots;
 
-  final allowedSpotIdsByList = filter.listIds.isEmpty
+  final allowedSpotIdsByFolder = filter.folderIds.isEmpty
       ? null
       : pairs
-            .where((p) => filter.listIds.contains(p.listId))
+            .where((p) => filter.folderIds.contains(p.folderId))
             .map((p) => p.spotId)
             .toSet();
 
@@ -268,7 +265,8 @@ final filteredSpotsProvider = Provider<List<Spot>>((ref) {
         (s.prefecture == null || !filter.prefectures.contains(s.prefecture))) {
       return false;
     }
-    if (allowedSpotIdsByList != null && !allowedSpotIdsByList.contains(s.id)) {
+    if (allowedSpotIdsByFolder != null &&
+        !allowedSpotIdsByFolder.contains(s.id)) {
       return false;
     }
     if (!matchesVisitState(s)) return false;

@@ -124,6 +124,33 @@ Future<void> loadSample(AppDatabase db, SampleSet set) async {
       ],
     );
 
+    // 1 階層構造に移行後の正本: spot_folders。
+    // 旧 spot_lists の代わりに、各 (spot, list) ペアの list を所属フォルダ
+    // に解決して spot_folders として投入。同一 (spot, folder) は uniqueKey で
+    // 集約される。
+    final listIdToFolderId = {
+      for (final l in lists) l.id: l.folderId,
+    };
+    batch.insertAll(
+      db.spotFolders,
+      [
+        for (final i in pairIndices)
+          if (listIdToFolderId[MockData.spotListPairs[i].listId] != null)
+            SpotFoldersCompanion.insert(
+              id: 'spotfolder-sample-${set.key}-$i',
+              spotId: MockData.spotListPairs[i].spotId,
+              folderId: listIdToFolderId[MockData.spotListPairs[i].listId]!,
+              orderIndex: i,
+              addedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            ),
+      ],
+      mode: InsertMode.insertOrIgnore,
+    );
+
+    // 互換性のため旧 spot_lists にも入れておく (UI からはもう参照されないが、
+    // 万が一の参照のために残す)。次の cleanup で削除予定。
     batch.insertAll(
       db.spotLists,
       [

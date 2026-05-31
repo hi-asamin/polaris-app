@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:polaris/features/account/models/user_profile.dart';
 import 'package:polaris/features/account/presentation/user_profile_provider.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
-import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/models/spot.dart';
 import 'package:polaris/features/spots/models/spot_category_x.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
@@ -43,7 +42,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
   List<Spot> _spotsForTab({
     required List<Spot> all,
     required Set<String> visitedSpotIds,
-    required Set<String> listMemberSpotIds,
+    required Set<String> folderMemberSpotIds,
   }) {
     Iterable<Spot> base;
     switch (_tab) {
@@ -52,7 +51,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       case AccountTab.favorite:
         base = all.where((s) => s.isFavorite);
       case AccountTab.saved:
-        base = all.where((s) => listMemberSpotIds.contains(s.id));
+        base = all.where((s) => folderMemberSpotIds.contains(s.id));
     }
     return base.where((s) => s.photoUrls.isNotEmpty).toList();
   }
@@ -64,7 +63,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       case AccountTab.favorite:
         return 'ハートを押した場所がここに集まります';
       case AccountTab.saved:
-        return 'リストに保存された場所はまだありません';
+        return 'フォルダに保存された場所はまだありません';
     }
   }
 
@@ -75,16 +74,15 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
     final scheme = theme.colorScheme;
     final spots = ref.watch(allSpotsProvider);
     final folders = ref.watch(foldersProvider);
-    final lists = ref.watch(listsProvider);
     final visits = ref.watch(allVisitsProvider);
-    final pairs = ref.watch(spotListPairsProvider);
+    final pairs = ref.watch(spotFolderPairsProvider);
     final profile = ref.watch(userProfileProvider).value;
     final visitedSpotIds = visits.map((v) => v.spotId).toSet();
-    final listMemberSpotIds = pairs.map((p) => p.spotId).toSet();
+    final folderMemberSpotIds = pairs.map((p) => p.spotId).toSet();
     final gridSpots = _spotsForTab(
       all: spots,
       visitedSpotIds: visitedSpotIds,
-      listMemberSpotIds: listMemberSpotIds,
+      folderMemberSpotIds: folderMemberSpotIds,
     );
 
     return Scaffold(
@@ -120,7 +118,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
                 profile: profile,
                 visitsCount: visits.length,
                 foldersCount: folders.length,
-                listsCount: lists.length,
+                savedCount: folderMemberSpotIds.length,
                 l: l,
                 onEdit: () => _openEditSheet(profile),
               ),
@@ -166,14 +164,14 @@ class _ProfileHeader extends StatelessWidget {
     required this.profile,
     required this.visitsCount,
     required this.foldersCount,
-    required this.listsCount,
+    required this.savedCount,
     required this.l,
     required this.onEdit,
   });
   final UserProfile? profile;
   final int visitsCount;
   final int foldersCount;
-  final int listsCount;
+  final int savedCount;
   final AppLocalizations l;
   final VoidCallback onEdit;
 
@@ -237,7 +235,7 @@ class _ProfileHeader extends StatelessWidget {
                       value: foldersCount,
                       label: l.accountStatsFolders,
                     ),
-                    _StatCounter(value: listsCount, label: l.accountStatsLists),
+                    _StatCounter(value: savedCount, label: '保存'),
                   ],
                 ),
               ),

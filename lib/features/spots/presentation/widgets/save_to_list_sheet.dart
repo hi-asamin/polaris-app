@@ -3,11 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
-import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/visits/presentation/visits_provider.dart';
 
-/// 任意のスポットを、フォルダ → リストの 2 階層ツリーから多選択保存する
-/// 共通ボトムシート。spot_detail / search / curation 詳細から共通で利用。
+/// 任意のスポットを、フォルダの多選択チェックリストから保存する共通シート。
+/// 1 階層構造への移行後、リスト概念は廃止。フォルダに直接スポットを所属させる。
+/// (ファイル名は履歴を辿りやすいよう一旦 save_to_list_sheet のまま残す)。
 class SaveToListSheet extends ConsumerStatefulWidget {
   const SaveToListSheet({required this.spotId, super.key});
   final String spotId;
@@ -26,21 +26,20 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final folders = ref.watch(foldersProvider);
-    final allLists = ref.watch(listsProvider);
-    final pairs = ref.watch(spotListPairsProvider);
+    final pairs = ref.watch(spotFolderPairsProvider);
 
     if (!_initialized) {
       _selected = pairs
           .where((p) => p.spotId == widget.spotId)
-          .map((p) => p.listId)
+          .map((p) => p.folderId)
           .toSet();
-      // 未訪問なら「行きたい」リストにデフォルトでチェックを入れる。
-      // (既存所属リストが何も無い新規保存時のデフォルト提案)
+      // 未訪問なら「行きたい」フォルダにデフォルトでチェックを入れる。
+      // (既存所属フォルダが何も無い新規保存時のデフォルト提案)
       final isVisited = ref
           .read(allVisitsProvider)
           .any((v) => v.spotId == widget.spotId);
       if (!isVisited && _selected.isEmpty) {
-        _selected.add(SystemIds.wantListId);
+        _selected.add(SystemIds.wantFolderId);
       }
       _initialized = true;
     }
@@ -54,14 +53,14 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'リストに保存',
+              'フォルダに保存',
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              '保存するリストを選択 (複数選択可)',
+              '保存するフォルダを選択 (複数選択可)',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -75,48 +74,37 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final folder in folders) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.folder_rounded,
-                              size: 16,
-                              color: folder.colorValue != null
-                                  ? Color(folder.colorValue!)
-                                  : scheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              folder.name,
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                    for (final folder in folders)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: _selected.contains(folder.id),
+                        onChanged: (v) => setState(() {
+                          if (v == true) {
+                            _selected.add(folder.id);
+                          } else {
+                            _selected.remove(folder.id);
+                          }
+                        }),
+                        secondary: Icon(
+                          folder.id == SystemIds.wantFolderId
+                              ? Icons.flag_rounded
+                              : Icons.folder_rounded,
+                          color: folder.colorValue != null
+                              ? Color(folder.colorValue!)
+                              : scheme.onSurfaceVariant,
+                          size: 22,
+                        ),
+                        title: Text(
+                          folder.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                      for (final list in allLists.where(
-                        (l) => l.folderId == folder.id,
-                      ))
-                        CheckboxListTile(
-                          dense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: _selected.contains(list.id),
-                          onChanged: (v) => setState(() {
-                            if (v == true) {
-                              _selected.add(list.id);
-                            } else {
-                              _selected.remove(list.id);
-                            }
-                          }),
-                          title: Text(list.name),
-                        ),
-                    ],
                   ],
                 ),
               ),
@@ -147,19 +135,19 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    final pairs = ref.read(spotListPairsProvider);
+    final pairs = ref.read(spotFolderPairsProvider);
     final current = pairs
         .where((p) => p.spotId == widget.spotId)
-        .map((p) => p.listId)
+        .map((p) => p.folderId)
         .toSet();
     final toAdd = _selected.difference(current);
     final toRemove = current.difference(_selected);
-    final notifier = ref.read(spotListPairsNotifierProvider.notifier);
-    for (final listId in toAdd) {
-      await notifier.add(widget.spotId, listId);
+    final notifier = ref.read(spotFolderPairsNotifierProvider.notifier);
+    for (final folderId in toAdd) {
+      await notifier.add(widget.spotId, folderId);
     }
-    for (final listId in toRemove) {
-      await notifier.remove(widget.spotId, listId);
+    for (final folderId in toRemove) {
+      await notifier.remove(widget.spotId, folderId);
     }
     if (!mounted) return;
     await HapticFeedback.mediumImpact();

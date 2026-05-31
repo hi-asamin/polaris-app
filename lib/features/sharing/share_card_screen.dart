@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
-import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/sharing/widgets/folder_share_card.dart';
 import 'package:polaris/features/sharing/widgets/share_card_preview.dart';
 
@@ -15,7 +14,6 @@ class ShareCardScreen extends ConsumerWidget {
     final folder = ref.watch(folderByIdProvider(folderId));
     final photos = ref.watch(folderCoverPhotosProvider(folderId));
     final spotCount = ref.watch(spotsCountByFolderProvider(folderId));
-    final lists = ref.watch(listsByFolderProvider(folderId));
     final scheme = Theme.of(context).colorScheme;
 
     if (folder == null) {
@@ -36,7 +34,7 @@ class ShareCardScreen extends ConsumerWidget {
           folder: folder,
           photos: photos,
           spotCount: spotCount,
-          listsCount: lists.length,
+          listsCount: 0,
         ),
         shareText: '${folder.name} - polaris で集めた行きたい場所',
         shareSubject: folder.name,

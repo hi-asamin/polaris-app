@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:polaris/core/db/system_entities.dart';
-import 'package:polaris/core/utils/id.dart';
 import 'package:polaris/core/utils/relative_date.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
-import 'package:polaris/features/lists/models/spot_list.dart';
-import 'package:polaris/features/lists/presentation/lists_provider.dart';
+import 'package:polaris/features/spots/models/spot.dart';
+import 'package:polaris/features/spots/models/spot_category_x.dart';
+import 'package:polaris/features/visits/presentation/visits_provider.dart';
 import 'package:polaris/shared/widgets/photo_collage.dart';
 
+/// フォルダ詳細。1 階層構造に移行後、フォルダ直下にスポットが並ぶ。
+/// (旧仕様ではここに「リスト」のカードが並んでいた)
 class FolderDetailScreen extends ConsumerWidget {
   const FolderDetailScreen({required this.folderId, super.key});
   final String folderId;
@@ -17,8 +19,7 @@ class FolderDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final folder = ref.watch(folderByIdProvider(folderId));
-    final lists = ref.watch(listsByFolderProvider(folderId));
-    final spotCount = ref.watch(spotsCountByFolderProvider(folderId));
+    final spots = ref.watch(spotsByFolderProvider(folderId));
     final scheme = Theme.of(context).colorScheme;
 
     if (folder == null) {
@@ -27,20 +28,13 @@ class FolderDetailScreen extends ConsumerWidget {
         body: const Center(child: Text('Folder not found')),
       );
     }
+    final isSystem = SystemIds.protectedFolderIds.contains(folder.id);
     final accent = folder.colorValue != null
         ? Color(folder.colorValue!)
         : scheme.primary;
 
     return Scaffold(
       backgroundColor: scheme.surface,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showDialog<void>(
-          context: context,
-          builder: (_) => _CreateListDialog(folderId: folderId),
-        ),
-        icon: const Icon(Icons.add),
-        label: const Text('リストを追加'),
-      ),
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
@@ -53,11 +47,12 @@ class FolderDetailScreen extends ConsumerWidget {
             iconTheme: const IconThemeData(color: Colors.white),
             actionsIconTheme: const IconThemeData(color: Colors.white),
             actions: [
-              IconButton(
-                tooltip: 'シェア',
-                onPressed: () => context.push('/share/folder/$folderId'),
-                icon: const Icon(Icons.ios_share_rounded),
-              ),
+              if (!isSystem)
+                IconButton(
+                  tooltip: 'シェア',
+                  onPressed: () => context.push('/share/folder/$folderId'),
+                  icon: const Icon(Icons.ios_share_rounded),
+                ),
               IconButton(
                 onPressed: () {},
                 icon: const Icon(Icons.more_horiz_rounded),
@@ -73,29 +68,50 @@ class FolderDetailScreen extends ConsumerWidget {
                 folderName: folder.name,
                 coverPhotoUrl: folder.coverPhotoUrl,
                 accent: accent,
-                listsCount: lists.length,
-                spotsCount: spotCount,
+                spotsCount: spots.length,
                 updatedAt: folder.updatedAt,
+                isSystem: isSystem,
               ),
             ),
           ),
-          if (lists.isEmpty)
-            const SliverFillRemaining(
-              child: Center(child: Text('リストがありません')),
+          if (spots.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    isSystem
+                        ? '気になる場所を保存しよう'
+                        : 'まだスポットがありません',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ),
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(8, 16, 8, 32),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  childAspectRatio: 1,
-                  crossAxisSpacing: 4,
-                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.72,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 16,
                 ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, i) => _FavoriteListCard(list: lists[i]),
-                  childCount: lists.length,
+                  (context, i) {
+                    final spot = spots[i];
+                    final visitCount = ref.watch(
+                      visitCountBySpotProvider(spot.id),
+                    );
+                    return _SpotPinCard(
+                      spot: spot,
+                      visitCount: visitCount,
+                      onTap: () => context.push('/spots/${spot.id}'),
+                    );
+                  },
+                  childCount: spots.length,
                 ),
               ),
             ),
@@ -110,16 +126,16 @@ class _FolderHeader extends StatelessWidget {
     required this.folderName,
     required this.coverPhotoUrl,
     required this.accent,
-    required this.listsCount,
     required this.spotsCount,
     required this.updatedAt,
+    required this.isSystem,
   });
   final String folderName;
   final String? coverPhotoUrl;
   final Color accent;
-  final int listsCount;
   final int spotsCount;
   final DateTime updatedAt;
+  final bool isSystem;
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +175,34 @@ class _FolderHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (isSystem)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.flag_rounded, size: 12, color: accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'デフォルト',
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               Text(
                 folderName,
                 style: const TextStyle(
@@ -174,7 +218,7 @@ class _FolderHeader extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '$spotsCount件のスポット ・ $listsCountリスト ・ ${relativeDate(updatedAt)}',
+                '$spotsCount件のスポット ・ ${relativeDate(updatedAt)}',
                 style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.92),
                   fontSize: 13,
@@ -189,190 +233,130 @@ class _FolderHeader extends StatelessWidget {
   }
 }
 
-class _FavoriteListCard extends ConsumerWidget {
-  const _FavoriteListCard({required this.list});
-  final SpotList list;
+class _SpotPinCard extends StatelessWidget {
+  const _SpotPinCard({
+    required this.spot,
+    required this.visitCount,
+    required this.onTap,
+  });
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final theme = Theme.of(context);
-    final photos = ref.watch(listCoverPhotosProvider(list.id));
-    final spotCount = ref.watch(spotsCountByListProvider(list.id));
-    final accent = list.colorValue != null
-        ? Color(list.colorValue!)
-        : scheme.primary;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () => context.push('/lists/${list.id}'),
-      child: Padding(
-        padding: const EdgeInsets.all(6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AspectRatio(
-              aspectRatio: 3 / 2,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ColoredBox(
-                  color: scheme.surface,
-                  child: PhotoCollage(
-                    photos: photos,
-                    gap: 2,
-                    fallbackColor: accent.withValues(alpha: 0.16),
-                  ),
-                ),
-              ),
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    list.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                if (!SystemIds.protectedListIds.contains(list.id))
-                  InkResponse(
-                    onTap: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => _DeleteListDialog(
-                        listId: list.id,
-                        listName: list.name,
-                      ),
-                    ),
-                    radius: 18,
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.delete_outline_rounded,
-                        size: 18,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'スポット：$spotCount 件',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CreateListDialog extends ConsumerStatefulWidget {
-  const _CreateListDialog({required this.folderId});
-  final String folderId;
-
-  @override
-  ConsumerState<_CreateListDialog> createState() => _CreateListDialogState();
-}
-
-class _CreateListDialogState extends ConsumerState<_CreateListDialog> {
-  final _controller = TextEditingController();
-  bool _submitting = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final name = _controller.text.trim();
-    if (name.isEmpty) return;
-    setState(() => _submitting = true);
-    final existing = ref.read(listsByFolderProvider(widget.folderId));
-    final nextOrder = existing.isEmpty
-        ? 0
-        : existing.map((l) => l.orderIndex).reduce((a, b) => a > b ? a : b) + 1;
-    final list = SpotList(
-      id: newId(),
-      folderId: widget.folderId,
-      name: name,
-      orderIndex: nextOrder,
-    );
-    await ref.read(listsNotifierProvider.notifier).create(list);
-    if (!mounted) return;
-    Navigator.pop(context);
-  }
+  final Spot spot;
+  final int visitCount;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('リストを作成'),
-      content: TextField(
-        controller: _controller,
-        maxLength: 25,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: 'リスト名を入力'),
-        onSubmitted: (_) => _submit(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.pop(context),
-          child: const Text('キャンセル'),
-        ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: const Text('作成'),
-        ),
-      ],
-    );
-  }
-}
-
-class _DeleteListDialog extends ConsumerWidget {
-  const _DeleteListDialog({required this.listId, required this.listName});
-  final String listId;
-  final String listName;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return AlertDialog(
-      title: const Text('リストを削除'),
-      content: Text.rich(
-        TextSpan(
-          children: [
-            const TextSpan(text: 'リスト「'),
-            TextSpan(
-              text: listName,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cat = spot.primaryCategory;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (spot.photoUrls.isNotEmpty)
+                    PhotoCollage(
+                      photos: spot.photoUrls.take(1).toList(),
+                      gap: 0,
+                      fallbackColor: cat.color.withValues(alpha: 0.18),
+                    )
+                  else
+                    Container(
+                      color: cat.color.withValues(alpha: 0.18),
+                      child: Icon(cat.icon, color: cat.color, size: 32),
+                    ),
+                  if (spot.isFavorite)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.favorite_rounded,
+                          size: 12,
+                          color: scheme.error,
+                        ),
+                      ),
+                    ),
+                  if (visitCount > 0)
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '訪問 $visitCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            const TextSpan(text: '」を削除してもよろしいですか？'),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('キャンセル'),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
           ),
-          onPressed: () async {
-            await ref.read(listsNotifierProvider.notifier).deleteList(listId);
-            if (context.mounted) Navigator.pop(context);
-          },
-          child: const Text('削除'),
-        ),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            spot.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              Icon(cat.icon, size: 12, color: cat.color),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  spot.city ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (spot.rating != null) ...[
+                const Icon(
+                  Icons.star_rounded,
+                  size: 12,
+                  color: Color(0xFFFFC107),
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  spot.rating!.toStringAsFixed(1),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
