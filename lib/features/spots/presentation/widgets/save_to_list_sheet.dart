@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:polaris/core/db/system_entities.dart';
+import 'package:polaris/core/utils/id.dart';
+import 'package:polaris/features/folders/models/folder.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/visits/presentation/visits_provider.dart';
 
@@ -105,6 +107,43 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
                           ),
                         ),
                       ),
+                    // 末尾に「新規フォルダを作成」エントリー
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: _saving ? null : _createNewFolder,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: scheme.primaryContainer,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.add_rounded,
+                                color: scheme.onPrimaryContainer,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              '新しいフォルダを作成',
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -133,6 +172,30 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
     );
   }
 
+  Future<void> _createNewFolder() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => const _NewFolderDialog(),
+    );
+    if (name == null || name.isEmpty) return;
+    if (!mounted) return;
+
+    final folders = ref.read(foldersProvider);
+    final nextOrder = folders.isEmpty
+        ? 0
+        : folders.map((f) => f.orderIndex).reduce((a, b) => a > b ? a : b) + 1;
+    final folder = Folder(
+      id: newId(),
+      name: name,
+      orderIndex: nextOrder,
+      updatedAt: DateTime.now(),
+    );
+    await ref.read(foldersNotifierProvider.notifier).create(folder);
+    if (!mounted) return;
+    // 作ったフォルダにそのままチェックを入れる。
+    setState(() => _selected.add(folder.id));
+  }
+
   Future<void> _save() async {
     setState(() => _saving = true);
     final pairs = ref.read(spotFolderPairsProvider);
@@ -153,5 +216,59 @@ class _SaveToListSheetState extends ConsumerState<SaveToListSheet> {
     await HapticFeedback.mediumImpact();
     if (!mounted) return;
     Navigator.pop(context);
+  }
+}
+
+/// 保存シート内の「新規フォルダ作成」から呼ばれる小ダイアログ。
+/// 入力された名前 (trim 済み) を返す。空ならキャンセル扱い。
+class _NewFolderDialog extends StatefulWidget {
+  const _NewFolderDialog();
+
+  @override
+  State<_NewFolderDialog> createState() => _NewFolderDialogState();
+}
+
+class _NewFolderDialogState extends State<_NewFolderDialog> {
+  final _controller = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isEmpty) {
+      Navigator.pop(context);
+      return;
+    }
+    setState(() => _submitting = true);
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('新しいフォルダ'),
+      content: TextField(
+        controller: _controller,
+        maxLength: 25,
+        autofocus: true,
+        decoration: const InputDecoration(hintText: 'フォルダ名を入力'),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: const Text('作成'),
+        ),
+      ],
+    );
   }
 }
