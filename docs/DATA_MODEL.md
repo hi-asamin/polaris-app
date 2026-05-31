@@ -1,36 +1,46 @@
 # polaris-app データモデル
 
-> ステータス: Decided v1.0 / 最終更新: 2026-05-10
+> ステータス: Decided v1.1 / 最終更新: 2026-05-31
 > 関連: [PRD.md](./PRD.md) / [TECH_STACK.md](./TECH_STACK.md) / [CLAUDE.md](../CLAUDE.md)
+>
+> **v1.1 の主な変更**: List テーブルを廃止し、Spot ↔ Folder 直結の M:N
+> (`spot_folders`) に集約。互換のため旧 `lists` / `spot_lists` テーブルは
+> 残存するが、UI からは参照しない。「行きたい」はシステムフォルダとして
+> 表現、「お気に入り」は `spots.is_favorite` フラグ。
 
-## 0. 設計上の確定事項 (2026-05-10)
+## 0. 設計上の確定事項
 
 | # | 決定 |
 |---|---|
 | 1 | 訪問は **1:N** (Spot に対して複数の Visit 履歴を持つ) |
-| 2 | **ユーザー管理のタグは廃止**。整理は Folder → List の 2 階層 |
+| 2 | **ユーザー管理のタグは廃止**。整理は **Folder の 1 階層のみ** (フォルダ内のリストは廃止) |
 | 3 | カテゴリ絞り込みは **Places types からの自動マッピング** (Phase 1)。Phase 2 で LLM 推論による soft attribute 拡張 |
 | 4 | 地域は **緯度経度・address_components から自動導出** (`prefecture` / `city` 列) |
 | 5 | Places API データは **30 日経過で自動再取得** |
+| 6 | 「行きたい」は **システムフォルダ** (`folder-system-want`) への所属で表現。削除不可。訪問記録挿入で自動 remove |
+| 7 | 「お気に入り」は `spots.is_favorite: bool` 独立フラグ。訪問の有無と無関係 |
 
 ---
 
 ## 1. エンティティ関係
 
 ```
-Folder (1) ─── (N) List
-List   (N) ─── (M) Spot      [join: SpotList]
+Folder (N) ─── (M) Spot      [join: SpotFolder]
 Spot   (1) ─── (N) Visit
 Visit  (1) ─── (N) VisitPhoto
 ```
 
-- **Folder**: ユーザーの最上位整理単位 (例: 「東京」「京都旅行 2026」「デート候補」)
-- **List**: フォルダ内のリスト (例: 「カフェ」「ラーメン」「観光」)
-- **Spot**: 保存されたスポット (1 つの Spot は複数の List に所属できる)
+- **Folder**: ユーザーの整理単位 (例: 「行きたい」「東京」「京都旅行 2026」「デート候補」)
+- **Spot**: 保存されたスポット (1 つの Spot は複数の Folder に所属できる)
 - **Visit**: スポットへの訪問履歴 (同じスポットに複数回行ける)
 - **VisitPhoto**: 訪問時の写真 (端末ローカル保存)
+- (旧) **List**: 廃止。スキーマは残るが新規書き込み無し
 
 「訪問状態」は **クエリで派生** させる (列としては保持しない)。詳細は §4。
+
+「行きたい」はシステムフォルダ (`folder-system-want`) との SpotFolder ペアで表現。
+オンボーディング完了時に自動作成され、UI 上は他のユーザーフォルダと同列に
+リストタブのトップに並ぶ。
 
 ---
 
@@ -56,26 +66,12 @@ Visit  (1) ─── (N) VisitPhoto
 Index:
 - `idx_folders_order` ON `(deleted_at, order_index)`
 
-### 2.2 `lists`
+### 2.2 `lists` (廃止予定 / 互換のためスキーマのみ残置)
 
-| カラム | 型 | 制約 | 説明 |
-|---|---|---|---|
-| id | TEXT | PK |  |
-| folder_id | TEXT | NOT NULL, FK → folders.id | 必ずフォルダに所属 |
-| name | TEXT | NOT NULL |  |
-| icon_name | TEXT |  |  |
-| color_hex | TEXT |  |  |
-| cover_photo_path | TEXT |  |  |
-| order_index | INTEGER | NOT NULL | フォルダ内の並び順 |
-| sort_mode | TEXT | NOT NULL DEFAULT 'manual' | `'manual' / 'added_at' / 'distance' / 'name'` |
-| created_at | INTEGER | NOT NULL |  |
-| updated_at | INTEGER | NOT NULL |  |
-| deleted_at | INTEGER |  |  |
-
-Index:
-- `idx_lists_folder` ON `(folder_id, deleted_at, order_index)`
-
-> フォルダ削除時は配下のリストを **カスケードソフトデリート**。Drift の `onDelete` で実装。
+> **v1.1 で廃止。** 1 階層フォルダ構造に集約し、Spot は Folder に直接所属
+> させる (`spot_folders`、§2.4)。新規書き込みは行わない。既存データは
+> v5 マイグレーションで spot_folders に変換済み。スキーマ自体は将来の
+> cleanup マイグレーションで drop 予定。
 
 ### 2.3 `spots`
 
@@ -101,7 +97,10 @@ Index:
 | place_types_json | TEXT |  | Places types の JSON 配列 (再分類用) |
 | photo_refs_json | TEXT |  | Places photo references の JSON 配列 |
 | user_memo | TEXT |  | スポット単位のメモ (訪問単位ではない) |
-| want_to_visit | INTEGER | NOT NULL DEFAULT 0 | 0/1 (「行きたい」フラグ) |
+| editorial_summary | TEXT |  | Places の editorial_summary。差別化された短い説明 |
+| google_maps_uri | TEXT |  | Places の googleMapsUri (外部リンク用) |
+| is_favorite | INTEGER | NOT NULL DEFAULT 0 | 0/1 (「お気に入り」フラグ、独立) |
+| want_to_visit | INTEGER | NOT NULL DEFAULT 0 | 0/1 (旧「行きたい」フラグ、廃止予定。実体は spot_folders へ移行済) |
 | last_place_synced_at | INTEGER | NOT NULL | Places API 最終取得時刻 (30 日で再取得) |
 | created_at | INTEGER | NOT NULL |  |
 | updated_at | INTEGER | NOT NULL |  |
@@ -114,23 +113,34 @@ Index:
 - `idx_spots_region` ON `(prefecture, city, deleted_at)`
 - `idx_spots_sync` ON `(last_place_synced_at)` (再取得バッチ用)
 
-### 2.4 `spot_lists` (Spot ↔ List 多対多)
+### 2.4 `spot_folders` (Spot ↔ Folder 多対多 / 現行モデル)
+
+1 階層フォルダ構造下での所属関係を表す M:N 中間テーブル。「行きたい」
+システムフォルダへの所属もこのテーブルで表現する。
 
 | カラム | 型 | 制約 | 説明 |
 |---|---|---|---|
 | id | TEXT | PK |  |
 | spot_id | TEXT | NOT NULL, FK → spots.id |  |
-| list_id | TEXT | NOT NULL, FK → lists.id |  |
-| order_index | INTEGER | NOT NULL | リスト内 (manual sort) の並び順 |
-| added_at | INTEGER | NOT NULL | リストに追加した時刻 |
+| folder_id | TEXT | NOT NULL, FK → folders.id |  |
+| order_index | INTEGER | NOT NULL | フォルダ内 (manual sort) の並び順 |
+| added_at | INTEGER | NOT NULL | フォルダに追加した時刻 |
 | created_at | INTEGER | NOT NULL |  |
 | updated_at | INTEGER | NOT NULL |  |
 | deleted_at | INTEGER |  |  |
 
-Index:
-- `idx_spot_lists_pair` UNIQUE ON `(spot_id, list_id)` WHERE `deleted_at IS NULL`
-- `idx_spot_lists_list` ON `(list_id, deleted_at, order_index)`
-- `idx_spot_lists_spot` ON `(spot_id, deleted_at)`
+Unique key:
+- `(spot_id, folder_id)` (同一フォルダに同一スポットを重複所属させない)
+
+Index (実装に応じて):
+- `idx_spot_folders_pair` UNIQUE ON `(spot_id, folder_id)`
+- `idx_spot_folders_folder` ON `(folder_id, deleted_at, order_index)`
+- `idx_spot_folders_spot` ON `(spot_id, deleted_at)`
+
+#### 2.4.1 `spot_lists` (旧 / 互換のため残置)
+
+旧 List モデル時代の Spot ↔ List 中間テーブル。v5 マイグレーションで
+spot_folders に変換済み。新規書き込みなし。将来の cleanup で drop 予定。
 
 ### 2.5 `visits`
 
@@ -230,15 +240,15 @@ GROUP BY s.id
 HAVING COUNT(v.id) = 0;
 ```
 
-「特定リスト内のスポット (リスト内の手動並び順で)」:
+「特定フォルダ内のスポット (フォルダ内の手動並び順で)」:
 
 ```sql
-SELECT s.*, sl.order_index FROM spots s
-INNER JOIN spot_lists sl
-  ON sl.spot_id = s.id AND sl.deleted_at IS NULL
+SELECT s.*, sf.order_index FROM spots s
+INNER JOIN spot_folders sf
+  ON sf.spot_id = s.id AND sf.deleted_at IS NULL
 WHERE s.deleted_at IS NULL
-  AND sl.list_id = ?
-ORDER BY sl.order_index;
+  AND sf.folder_id = ?
+ORDER BY sf.order_index;
 ```
 
 「現在地から 5 km 以内、訪問済みカフェ」:
@@ -306,7 +316,7 @@ GROUP BY s.id;
 | 用途 | 想定追加 |
 |---|---|
 | LLM soft attributes | `spots.soft_attributes_json` (TEXT) |
-| 共有リスト | `lists.owner_user_id`, `list_members` テーブル |
+| 共有フォルダ | `folders.owner_user_id`, `folder_members` テーブル |
 | 同期 | `sync_log` テーブル (差分プッシュ用) |
 | クラウド写真 | `visit_photos.remote_url` |
 | プラン (順序付き訪問) | `plans` / `plan_items` |
