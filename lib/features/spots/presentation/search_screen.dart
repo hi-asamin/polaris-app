@@ -4,11 +4,14 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/core/network/places_api_client.dart';
 import 'package:polaris/core/network/places_api_provider.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
+import 'package:polaris/features/visits/presentation/visits_provider.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -181,10 +184,37 @@ class _SearchResultCard extends ConsumerStatefulWidget {
 }
 
 class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
-  bool _saving = false;
+  bool _busy = false;
 
-  Future<void> _save() async {
-    setState(() => _saving = true);
+  /// 検索候補をタップした時の挙動: 保存 (idempotent) → 詳細画面へ遷移。
+  /// 「行きたい」フォルダ自動追加は SaveToListSheet 経路と挙動を揃えるため
+  /// ここでも実施 (未訪問のとき)。
+  Future<void> _openDetail() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final router = GoRouter.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final spotId = await ref
+          .read(spotsNotifierProvider.notifier)
+          .saveFromPlace(widget.result);
+      await _ensureInWantFolderIfUnvisited(spotId);
+      if (!mounted) return;
+      // router.push の戻り Future は意図的に await しない (popまで待ちたくない)
+      unawaited(router.push('/spots/$spotId'));
+    } on Exception catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('開けませんでした: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 「保存」ボタンの挙動: 保存 → SaveToListSheet (フォルダ選択) を開く。
+  /// 結果画面に留まるので連続保存しやすい。
+  Future<void> _saveAndPickFolder() async {
+    if (_busy) return;
+    setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final spotId = await ref
@@ -207,8 +237,25 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _ensureInWantFolderIfUnvisited(String spotId) async {
+    final isVisited = ref
+        .read(allVisitsProvider)
+        .any((v) => v.spotId == spotId);
+    if (isVisited) return;
+    final alreadyIn = ref
+        .read(spotFolderPairsProvider)
+        .any(
+          (p) =>
+              p.spotId == spotId && p.folderId == SystemIds.wantFolderId,
+        );
+    if (alreadyIn) return;
+    await ref
+        .read(spotFolderPairsNotifierProvider.notifier)
+        .add(spotId, SystemIds.wantFolderId);
   }
 
   @override
@@ -225,7 +272,9 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
       color: scheme.surfaceContainerLow,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
-      child: Padding(
+      child: InkWell(
+        onTap: _busy ? null : _openDetail,
+        child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,7 +358,7 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
                             vertical: 6,
                           ),
                         ),
-                        icon: _saving
+                        icon: _busy
                             ? const SizedBox(
                                 width: 14,
                                 height: 14,
@@ -322,7 +371,7 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
                                 size: 16,
                               ),
                         label: Text(widget.l.searchSaveToList),
-                        onPressed: _saving ? null : _save,
+                        onPressed: _busy ? null : _saveAndPickFolder,
                       ),
                     ],
                   ),
@@ -330,6 +379,7 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
