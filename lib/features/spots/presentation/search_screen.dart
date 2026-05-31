@@ -4,14 +4,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:polaris/core/db/system_entities.dart';
 import 'package:polaris/core/network/places_api_client.dart';
 import 'package:polaris/core/network/places_api_provider.dart';
 import 'package:polaris/features/folders/presentation/folders_provider.dart';
 import 'package:polaris/features/lists/presentation/lists_provider.dart';
 import 'package:polaris/features/spots/presentation/spots_provider.dart';
-import 'package:polaris/features/visits/presentation/visits_provider.dart';
 import 'package:polaris/l10n/gen/app_localizations.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -186,32 +183,25 @@ class _SearchResultCard extends ConsumerStatefulWidget {
 class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
   bool _busy = false;
 
-  /// 検索候補をタップした時の挙動: 保存 (idempotent) → 詳細画面へ遷移。
-  /// 「行きたい」フォルダ自動追加は SaveToListSheet 経路と挙動を揃えるため
-  /// ここでも実施 (未訪問のとき)。
-  Future<void> _openDetail() async {
+  /// 検索候補をタップした時の挙動: **保存はしない**。
+  /// 場所の詳細をプレビューするボトムシートを開くだけ。
+  /// 保存はシート内 (またはカード右の「保存」ボタン) の明示的操作で行う。
+  Future<void> _openPreview() async {
     if (_busy) return;
-    setState(() => _busy = true);
-    final router = GoRouter.of(context);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final spotId = await ref
-          .read(spotsNotifierProvider.notifier)
-          .saveFromPlace(widget.result);
-      await _ensureInWantFolderIfUnvisited(spotId);
-      if (!mounted) return;
-      // router.push の戻り Future は意図的に await しない (popまで待ちたくない)
-      unawaited(router.push('/spots/$spotId'));
-    } on Exception catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('開けませんでした: $e')));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _PlacePreviewSheet(
+        result: widget.result,
+        l: widget.l,
+        onSave: _saveAndPickFolder,
+      ),
+    );
   }
 
   /// 「保存」ボタンの挙動: 保存 → SaveToListSheet (フォルダ選択) を開く。
-  /// 結果画面に留まるので連続保存しやすい。
+  /// プレビューシート内の保存ボタンからも呼ばれる。
   Future<void> _saveAndPickFolder() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -241,23 +231,6 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
     }
   }
 
-  Future<void> _ensureInWantFolderIfUnvisited(String spotId) async {
-    final isVisited = ref
-        .read(allVisitsProvider)
-        .any((v) => v.spotId == spotId);
-    if (isVisited) return;
-    final alreadyIn = ref
-        .read(spotFolderPairsProvider)
-        .any(
-          (p) =>
-              p.spotId == spotId && p.folderId == SystemIds.wantFolderId,
-        );
-    if (alreadyIn) return;
-    await ref
-        .read(spotFolderPairsNotifierProvider.notifier)
-        .add(spotId, SystemIds.wantFolderId);
-  }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -273,7 +246,7 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: _busy ? null : _openDetail,
+        onTap: _busy ? null : _openPreview,
         child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -382,6 +355,147 @@ class _SearchResultCardState extends ConsumerState<_SearchResultCard> {
         ),
         ),
       ),
+    );
+  }
+}
+
+/// 検索候補タップで開くプレビューシート。保存は一切しない。
+/// 「保存」ボタンを押した時だけ親 (_SearchResultCard) に保存処理を委譲する。
+class _PlacePreviewSheet extends StatelessWidget {
+  const _PlacePreviewSheet({
+    required this.result,
+    required this.l,
+    required this.onSave,
+  });
+
+  final PlaceSearchResult result;
+  final AppLocalizations l;
+  final Future<void> Function() onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final mediaSize = MediaQuery.sizeOf(context);
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: mediaSize.height * 0.85),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (result.photoNames.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: _PreviewPhoto(name: result.photoNames.first),
+                    ),
+                  ),
+                ),
+              Text(
+                result.name,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              if (result.formattedAddress != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.place_outlined,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        result.formattedAddress!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (result.rating != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 18,
+                      color: Color(0xFFFFC107),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      result.rating!.toStringAsFixed(1),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (result.ratingCount != null) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '(${result.ratingCount} 件のレビュー)',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    await onSave();
+                  },
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: Text(l.searchSaveToList),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PreviewPhoto extends ConsumerWidget {
+  const _PreviewPhoto({required this.name});
+  final String name;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final client = ref.read(placesApiClientProvider);
+    final scheme = Theme.of(context).colorScheme;
+    if (client == null) {
+      return Container(color: scheme.surfaceContainerHighest);
+    }
+    return CachedNetworkImage(
+      imageUrl: client.photoUrl(name, maxWidthPx: 1200),
+      fit: BoxFit.cover,
+      placeholder: (c, _) => Container(color: scheme.surfaceContainerHighest),
+      errorWidget: (c, _, _) =>
+          Container(color: scheme.surfaceContainerHighest),
     );
   }
 }
