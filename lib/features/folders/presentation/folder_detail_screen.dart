@@ -109,6 +109,14 @@ class FolderDetailScreen extends ConsumerWidget {
                       spot: spot,
                       visitCount: visitCount,
                       onTap: () => context.push('/spots/${spot.id}'),
+                      onRemove: () => _confirmRemoveFromFolder(
+                        context,
+                        ref,
+                        spotId: spot.id,
+                        spotName: spot.name,
+                        folderId: folderId,
+                        folderName: folder.name,
+                      ),
                     );
                   },
                   childCount: spots.length,
@@ -118,6 +126,40 @@ class FolderDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmRemoveFromFolder(
+    BuildContext context,
+    WidgetRef ref, {
+    required String spotId,
+    required String spotName,
+    required String folderId,
+    required String folderName,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('「$folderName」から外しますか?'),
+        content: Text(
+          '「$spotName」をこのフォルダから外します。\n'
+          'スポット自体は他のフォルダに残っていればマップに表示されます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('外す'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref
+        .read(spotFolderPairsNotifierProvider.notifier)
+        .remove(spotId, folderId);
   }
 }
 
@@ -238,11 +280,13 @@ class _SpotPinCard extends StatelessWidget {
     required this.spot,
     required this.visitCount,
     required this.onTap,
+    required this.onRemove,
   });
 
   final Spot spot;
   final int visitCount;
   final VoidCallback onTap;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -252,6 +296,7 @@ class _SpotPinCard extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
+      onLongPress: onRemove,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

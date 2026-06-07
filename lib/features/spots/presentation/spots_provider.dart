@@ -224,17 +224,27 @@ final spotFilterProvider = NotifierProvider<SpotFilterNotifier, SpotFilter>(
   SpotFilterNotifier.new,
 );
 
+/// 「保存中のスポット」 = 少なくとも 1 つのフォルダに所属しているスポット。
+/// フォルダ所属が無くなった (= ユーザーが全フォルダから外した) スポットは
+/// 「保存していない」扱いとし、マップにも表示しない。
+final savedSpotIdsProvider = Provider<Set<String>>((ref) {
+  return ref.watch(spotFolderPairsProvider).map((p) => p.spotId).toSet();
+});
+
 final filteredSpotsProvider = Provider<List<Spot>>((ref) {
   final spots = ref.watch(allSpotsProvider);
   final filter = ref.watch(spotFilterProvider);
   final pairs = ref.watch(spotFolderPairsProvider);
+  final savedIds = ref.watch(savedSpotIdsProvider);
   final wantIds = ref.watch(wantFolderSpotIdsProvider);
   final visitedIds = ref
       .watch(allVisitsProvider)
       .map((v) => v.spotId)
       .toSet();
 
-  if (filter.isEmpty) return spots;
+  // フォルダ所属なし (= 保存していない) はマップから除外。
+  final saved = spots.where((s) => savedIds.contains(s.id)).toList();
+  if (filter.isEmpty) return saved;
 
   final allowedSpotIdsByFolder = filter.folderIds.isEmpty
       ? null
@@ -256,7 +266,7 @@ final filteredSpotsProvider = Provider<List<Spot>>((ref) {
     }
   }
 
-  return spots.where((s) {
+  return saved.where((s) {
     if (filter.categories.isNotEmpty &&
         !filter.categories.contains(s.primaryCategory)) {
       return false;
